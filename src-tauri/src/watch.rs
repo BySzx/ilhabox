@@ -14,7 +14,9 @@ use std::time::{Duration, Instant};
 use windows::Win32::System::StationsAndDesktops::{CloseDesktop, OpenInputDesktop, DESKTOP_ACCESS_FLAGS, DESKTOP_CONTROL_FLAGS};
 use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::core::w;
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows::core::PWSTR;
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::RemoteDesktop::{WTSRegisterSessionNotification, NOTIFY_FOR_THIS_SESSION};
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
@@ -24,7 +26,7 @@ use windows::Win32::UI::Accessibility::{
     UIA_EditControlTypeId, UIA_NamePropertyId, UIA_TextControlTypeId, UIA_ValuePatternId,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowTextW, RegisterClassW, TranslateMessage, MSG,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowTextW, GetWindowThreadProcessId, RegisterClassW, TranslateMessage, MSG,
     WINDOW_EX_STYLE, WNDCLASSW, WS_POPUP,
 };
 
@@ -179,6 +181,26 @@ pub fn foreground() -> (String, Option<String>) {
     let title = foreground_title();
     let url = if is_browser(&title) { automation().and_then(|ua| browser_url(&ua, unsafe { GetForegroundWindow() })) } else { None };
     (title, url)
+}
+
+/// The window in front belongs to the installed WhatsApp app (not WhatsApp Web in a browser).
+fn whatsapp_app_in_front(title: &str) -> bool {
+    let exe = unsafe {
+        let hwnd = GetForegroundWindow();
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        let Ok(h) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else { return false };
+        let mut buf = [0u16; 520];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len).is_ok();
+        let _ = CloseHandle(h);
+        if !ok {
+            return false;
+        }
+        String::from_utf16_lossy(&buf[..len as usize]).to_lowercase()
+    };
+    let name = exe.rsplit('\\').next().unwrap_or(&exe);
+    name.contains("whatsapp") || (name == "applicationframehost.exe" && title.contains("WhatsApp"))
 }
 
 pub fn foreground_title() -> String {
@@ -407,7 +429,7 @@ pub fn spawn(dir: PathBuf) {
             }
 
             // WhatsApp in front for a while, and not what is being timed.
-            let in_whats = title.contains("WhatsApp");
+            let in_whats = !is_browser(&title) && title.contains("WhatsApp") && whatsapp_app_in_front(&title);
             whats_since = if in_whats { whats_since.or(Some(Instant::now())) } else { None };
             let whats_long = cfg.whats_min > 0 && whats_since.is_some_and(|t| t.elapsed() >= Duration::from_secs(cfg.whats_min as u64 * 60));
             if whats_long && running.is_none_or(|r| r.tipo != "WhatsApp") {

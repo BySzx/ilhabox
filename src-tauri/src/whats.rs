@@ -175,8 +175,10 @@ fn avatar(xml: &str, handler: &str) -> Option<String> {
     None
 }
 
-fn is_whatsapp(xml: &str, handler: &str) -> bool {
-    xml.contains("web.whatsapp.com") || handler.to_lowercase().contains("whatsapp")
+/// Only the installed WhatsApp app (the company account). WhatsApp Web in the browser is the
+/// personal one and stays out, even though its toasts carry "web.whatsapp.com".
+fn is_whatsapp(_xml: &str, handler: &str) -> bool {
+    handler.to_lowercase().contains("whatsapp")
 }
 
 fn strip_unread(line: &str) -> String {
