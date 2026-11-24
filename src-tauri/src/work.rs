@@ -80,6 +80,8 @@ impl Entry {
 #[serde(default)]
 struct Book {
     entries: Vec<Entry>,
+    /// Stretches marked "livre" (nothing to post): they stop showing as gaps.
+    livres: Vec<Seg>,
 }
 
 static BOOK: Mutex<Option<(PathBuf, Book)>> = Mutex::new(None);
@@ -95,7 +97,8 @@ fn write(path: &PathBuf, book: &Book) {
 fn publish(book: &Book) {
     let since = now_ms() - SEND_DAYS * DAY_MS;
     let recent: Vec<&Entry> = book.entries.iter().filter(|e| e.start >= since || !e.done).collect();
-    bus::send("work", serde_json::json!({ "entries": recent }), true);
+    let livres: Vec<&Seg> = book.livres.iter().filter(|g| g.s >= since).collect();
+    bus::send("work", serde_json::json!({ "entries": recent, "livres": livres }), true);
 }
 
 pub fn init(dir: PathBuf) {
@@ -107,6 +110,7 @@ pub fn init(dir: PathBuf) {
     }
     let cutoff = now_ms() - KEEP_DAYS * DAY_MS;
     book.entries.retain(|e| e.start >= cutoff || !e.done);
+    book.livres.retain(|g| g.s >= cutoff);
     publish(&book);
     *BOOK.lock() = Some((path, book));
 }
@@ -193,8 +197,11 @@ pub fn pause() -> Result<Value, String> {
     })
 }
 
-/// Continues an entry (paused or concluded) in a new period; the one running is paused.
+/// Continues an entry (paused or concluded); the one running is paused. After a short pause
+/// with nothing else timed in between (bathroom, coffee) the same period just goes on, so the
+/// day does not fill up with tiny Movidesk entries.
 pub fn resume(args: &Value) -> Result<Value, String> {
+    let join_ms = crate::config::get().juntar_pausa_min as i64 * 60_000;
     with(|b| {
         let i = entry(b, args)?;
         if b.entries[i].running() {
@@ -202,9 +209,49 @@ pub fn resume(args: &Value) -> Result<Value, String> {
         }
         let at = now_ms();
         pause_all(b, at);
+        let id = b.entries[i].id;
+        let last = b.entries[i].segs.last().copied();
+        let other_between = |from: i64| {
+            b.entries.iter().filter(|o| o.id != id).flat_map(|o| o.segs.iter()).any(|g| g.e.unwrap_or(at) > from && g.s < at)
+        };
+        let join = last.and_then(|g| g.e).is_some_and(|end| at - end <= join_ms && !g_sent(&last) && !other_between(end));
         let e = &mut b.entries[i];
-        e.segs.push(Seg { s: at, e: None, sent: false });
+        if join {
+            if let Some(g) = e.segs.last_mut() {
+                g.e = None;
+            }
+        } else {
+            e.segs.push(Seg { s: at, e: None, sent: false });
+        }
         e.done = false;
+        Ok(Value::Null)
+    })
+}
+
+fn g_sent(g: &Option<Seg>) -> bool {
+    g.is_some_and(|g| g.sent)
+}
+
+/// Marks a stretch of the day as free time (nothing to post): it stops showing as a gap.
+pub fn free(args: &Value) -> Result<Value, String> {
+    let s = args.get("s").and_then(Value::as_i64).ok_or("sem início")?;
+    let e = args.get("e").and_then(Value::as_i64).ok_or("sem fim")?;
+    if e <= s {
+        return Err("horário inválido".into());
+    }
+    with(|b| {
+        b.livres.push(Seg { s, e: Some(e), sent: true });
+        Ok(Value::Null)
+    })
+}
+
+/// Turns all periods of an entry into one, from the first start to the last end.
+pub fn join(args: &Value) -> Result<Value, String> {
+    with(|b| {
+        let i = entry(b, args)?;
+        let e = &mut b.entries[i];
+        let (Some(first), Some(last)) = (e.segs.first().copied(), e.segs.last().copied()) else { return Ok(Value::Null) };
+        e.segs = vec![Seg { s: first.s, e: last.e, sent: false }];
         Ok(Value::Null)
     })
 }

@@ -40,7 +40,7 @@ export function seed(f: Fire): void {
     modelo: "{inicio} às {fim} ({duracao}) · {atividade}\n{descricao}",
     tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"],
     metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
-    movideskPalavra: "movidesk", lembreteMin: 10, lembreteLongoMin: 120, whatsMin: 2, pausarAoTravar: true,
+    movideskPalavra: "movidesk", lembreteMin: 10, lembreteLongoMin: 120, whatsMin: 2, pausarAoTravar: true, juntarPausaMin: 10, buracoMin: 15,
     checklists: [
       { nome: "Erro de NF-e", itens: ["Certificado digital válido", "Série e numeração", "Status da SEFAZ", "Dados do destinatário"] },
       { nome: "Sem acesso", itens: ["Usuário ativo", "Senha resetada", "Permissões do perfil", "Testado com o cliente"] },

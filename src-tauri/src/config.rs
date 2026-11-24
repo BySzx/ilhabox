@@ -56,6 +56,11 @@ pub struct Config {
     /// Pause on Win+L and dim the phone.
     pub pausar_ao_travar: bool,
     pub checklists: Vec<Checklist>,
+    /// A pause shorter than this (bathroom, coffee) does not split the activity: continuing joins
+    /// the same period.
+    pub juntar_pausa_min: u32,
+    /// Only gaps at least this long show up as "sem apontamento".
+    pub buraco_min: u32,
 }
 
 impl Default for Config {
@@ -84,10 +89,12 @@ impl Default for Config {
             fim_turno: "18:00".into(),
             mouse_lado: "direita".into(),
             movidesk_palavra: "movidesk".into(),
-            lembrete_min: 10,
+            lembrete_min: 20,
             lembrete_longo_min: 120,
             whats_min: 2,
             pausar_ao_travar: true,
+            juntar_pausa_min: 10,
+            buraco_min: 15,
             checklists: vec![
                 Checklist {
                     nome: "Erro de NF-e".into(),

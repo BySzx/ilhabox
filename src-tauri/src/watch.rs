@@ -355,7 +355,8 @@ pub fn spawn(dir: PathBuf) {
                     if let Some(id) = paused_by_lock.take() {
                         let entry = work::snapshot().into_iter().find(|e| e.id == id);
                         if let Some(e) = entry.filter(|e| !e.done && !e.running()) {
-                            if away < Duration::from_secs(120) {
+                            // Bathroom, coffee: back within the short-pause limit just carries on, no question.
+                            if away <= Duration::from_secs(cfg.juntar_pausa_min.max(2) as u64 * 60) {
                                 let _ = work::resume(&json!({ "id": id }));
                             } else {
                                 suggest(
@@ -482,7 +483,7 @@ pub fn spawn(dir: PathBuf) {
             if shift && cfg.lembrete_min > 0 && running.is_none() && idle_long && note_due {
                 {
                     last_idle_note = Some(Instant::now());
-                    let mut actions = vec![json!({ "label": "Novo apontamento", "go": "horas" })];
+                    let mut actions = vec![json!({ "label": "Novo apontamento", "go": "horas" }), json!({ "label": "Tô livre" })];
                     if let Some(p) = entries.iter().filter(|e| !e.done).max_by_key(|e| e.segs.last().and_then(|g| g.e).unwrap_or(0)) {
                         actions.insert(0, json!({ "label": format!("Continuar {}", tag(p)), "cmd": "work_resume", "args": { "id": p.id } }));
                     }

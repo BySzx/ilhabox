@@ -249,6 +249,16 @@ export function Ajustes(): JSX.Element {
             </label>
           </div>
           <span class="hint">0 desliga o aviso.</span>
+          <div class="row">
+            <label class="field small">
+              Pausa curta que não divide (min)
+              <input type="number" min="0" value={draft.juntarPausaMin} onInput={(e) => edit(() => setDraft("juntarPausaMin", Number(e.currentTarget.value) || 0))} />
+            </label>
+            <label class="field small">
+              Buraco a partir de (min)
+              <input type="number" min="1" value={draft.buracoMin} onInput={(e) => edit(() => setDraft("buracoMin", Number(e.currentTarget.value) || 15))} />
+            </label>
+          </div>
           <label class="toggle">
             <input type="checkbox" checked={draft.pausarAoTravar} onChange={(e) => edit(() => setDraft("pausarAoTravar", e.currentTarget.checked))} />
             Pausar o apontamento e apagar a tela do celular quando travar o PC (Win+L)

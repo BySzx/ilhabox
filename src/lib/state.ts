@@ -19,6 +19,7 @@ export type Config = {
   easypacPacote: string; inicioTurno: string; fimTurno: string; mouseLado: string;
   movideskPalavra: string; lembreteMin: number; lembreteLongoMin: number; whatsMin: number; pausarAoTravar: boolean;
   checklists: { nome: string; itens: string[] }[];
+  juntarPausaMin: number; buracoMin: number;
 };
 export type Action = { label: string; cmd?: string; args?: Record<string, unknown>; go?: string };
 export type Suggestion = { id: string; text: string; detail: string; actions: Action[]; at: number };
@@ -69,6 +70,8 @@ export const onNewMessage = (fn: (m: WMsg) => void): void => void newListeners.a
 // ------------------------------------------------------------------ work, config, phone, update
 
 export const [entries, setEntries] = createSignal<Entry[]>([]);
+/** Stretches marked as free time: not gaps, nothing to post. */
+export const [livres, setLivres] = createSignal<Seg[]>([]);
 export const isRunning = (e: Entry): boolean => e.segs.length > 0 && e.segs[e.segs.length - 1].e == null;
 export const isPaused = (e: Entry): boolean => !e.done && !isRunning(e);
 export const running = createMemo(() => entries().find(isRunning) ?? null);
@@ -77,6 +80,7 @@ export const paused = createMemo(() => entries().filter((e) => isPaused(e) && !i
 export const [config, setConfig] = createStore<Config>({
   atalhos: [], modelo: "", tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"], metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
   movideskPalavra: "movidesk", lembreteMin: 10, lembreteLongoMin: 120, whatsMin: 2, pausarAoTravar: true, checklists: [],
+  juntarPausaMin: 10, buracoMin: 15,
 });
 export const [suggestion, setSuggestion] = createSignal<Suggestion | null>(null);
 export const [pcLocked, setPcLocked] = createSignal(false);
@@ -111,8 +115,9 @@ export function initState(): void {
     toastT = window.setTimeout(() => setToast(null), 6000);
     newListeners.forEach((fn) => fn(m));
   });
-  on<{ entries: Entry[] }>("work", (w) => {
+  on<{ entries: Entry[]; livres?: Seg[] }>("work", (w) => {
     setEntries(w.entries);
+    setLivres(w.livres ?? []);
     setLoaded(true);
   });
   on<Config>("config", (c) => setConfig(reconcile(c)));
@@ -258,14 +263,14 @@ export function atClock(day: number, hhmm: string): number {
 }
 
 /**
- * Stretches of the shift with nothing timed (≥ 5 min), from the first activity of the day until
+ * Stretches of the shift with nothing timed (at least "buracoMin", 15 min by default), from the first activity of the day until
  * now (today) or the end of the shift. Before the first activity is "not started yet", not a gap.
  */
 export function gaps(day: number, at = now()): { s: number; e: number }[] {
   const from = atClock(day, config.inicioTurno || "08:00");
   const to = Math.min(atClock(day, config.fimTurno || "18:00"), at);
-  const busy = entries()
-    .flatMap((e) => e.segs)
+  const min = Math.max(1, config.buracoMin || 15) * 60000;
+  const busy = [...entries().flatMap((e) => e.segs), ...livres()]
     .map((g) => ({ s: g.s, e: g.e ?? at }))
     .filter((g) => g.e > from && g.s < to)
     .sort((a, b) => a.s - b.s);
@@ -273,9 +278,9 @@ export function gaps(day: number, at = now()): { s: number; e: number }[] {
   const out: { s: number; e: number }[] = [];
   let cur = Math.max(from, busy[0].s);
   for (const g of busy) {
-    if (g.s - cur >= 5 * 60000) out.push({ s: cur, e: g.s });
+    if (g.s - cur >= min) out.push({ s: cur, e: g.s });
     cur = Math.max(cur, g.e);
   }
-  if (to - cur >= 5 * 60000) out.push({ s: cur, e: to });
+  if (to - cur >= min) out.push({ s: cur, e: to });
   return out;
 }

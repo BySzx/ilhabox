@@ -229,6 +229,9 @@ export function Horas(): JSX.Element {
                     </span>
                     <span class="dim">{dur(row.gap.e - row.gap.s)} sem apontamento</span>
                     <span class="grow" />
+                    <button class="btn ghost sm" onClick={() => void cmd("work_free", row.gap).then(() => note("Marcado como livre"), feedback)}>
+                      Livre
+                    </button>
                     <button class="btn ghost sm" onClick={() => setAdding(row.gap)}>
                       <Plus size={14} /> Preencher
                     </button>
@@ -466,11 +469,21 @@ function EditSheet(p: { entry: Entry; close: () => void }): JSX.Element {
               </div>
             )}
           </Index>
-          <Show when={segs()[segs().length - 1]?.e != null}>
-            <button class="btn ghost sm add-seg" onClick={addSeg}>
-              <Plus size={14} /> Período
-            </button>
-          </Show>
+          <div class="row">
+            <Show when={segs()[segs().length - 1]?.e != null}>
+              <button class="btn ghost sm add-seg" onClick={addSeg}>
+                <Plus size={14} /> Período
+              </button>
+            </Show>
+            <Show when={segs().length > 1}>
+              <button
+                class="btn ghost sm add-seg"
+                onClick={() => void cmd("work_join", { id: e.id }).then(() => (note("Períodos juntados em um"), p.close()), feedback)}
+              >
+                Juntar em um período
+              </button>
+            </Show>
+          </div>
         </div>
         <div class="row">
           <button class="btn ghost red-text" onClick={remove}>
