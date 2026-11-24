@@ -53,9 +53,13 @@ pub fn run(app: &AppHandle, name: &str, args: Value) -> Result<Value, String> {
         "work_update" => work::update(&args),
         "work_add" => work::add(&args),
         "janela_atual" => {
-            let title = crate::watch::foreground_title();
-            let ticket = crate::watch::parse_ticket(&title, &config::get().movidesk_palavra);
-            Ok(json!({ "title": title, "ticket": ticket }))
+            let (title, url) = crate::watch::foreground();
+            let ticket = url
+                .as_deref()
+                .and_then(crate::watch::parse_ticket_url)
+                .map(|n| (n, String::new()))
+                .or_else(|| crate::watch::parse_ticket(&title, &config::get().movidesk_palavra));
+            Ok(json!({ "title": title, "url": url, "ticket": ticket }))
         }
         "sugestao_fechar" => crate::watch::dismiss(&str_arg(&args, "id")),
         "work_delete" => work::remove(&args),

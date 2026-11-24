@@ -32,7 +32,7 @@ export function Ajustes(): JSX.Element {
   const [dirty, setDirty] = createSignal(false);
   const [saved, setSaved] = createSignal("");
   const [auto, setAuto] = createSignal(false);
-  const [probe, setProbe] = createSignal<{ title: string; ticket: [string, string] | null } | null>(null);
+  const [probe, setProbe] = createSignal<{ title: string; url: string | null; ticket: [string, string] | null } | null>(null);
 
   // A fresh copy whenever the agent sends the config, unless there are unsaved edits.
   createEffect(on(() => JSON.stringify(config), () => !dirty() && setDraft(reconcile(structuredClone(unwrap(config))))));
@@ -254,11 +254,11 @@ export function Ajustes(): JSX.Element {
             Pausar o apontamento e apagar a tela do celular quando travar o PC (Win+L)
           </label>
           <label class="field">
-            Palavra que identifica a janela do Movidesk
+            Ticket: lido do endereço do Movidesk no navegador. Reserva: palavra no título da janela
             <input value={draft.movideskPalavra} onInput={(e) => edit(() => setDraft("movideskPalavra", e.currentTarget.value.trim()))} />
           </label>
           <div class="row">
-            <button class="btn sm" onClick={() => setTimeout(() => void cmd<{ title: string; ticket: [string, string] | null }>("janela_atual").then(setProbe, () => undefined), 4000)}>
+            <button class="btn sm" onClick={() => setTimeout(() => void cmd<{ title: string; url: string | null; ticket: [string, string] | null }>("janela_atual").then(setProbe, () => undefined), 4000)}>
               Testar em 4 s
             </button>
             <span class="hint">Clique, vá pra aba do ticket no navegador e espere.</span>
@@ -268,7 +268,9 @@ export function Ajustes(): JSX.Element {
               <div class="preview">
                 Janela: {pr().title || "(sem título)"}
                 {"\n"}
-                {pr().ticket ? `Ticket ${pr().ticket![0]} · ${pr().ticket![1] || "sem assunto"}` : "Nenhum ticket reconhecido"}
+                Endereço: {pr().url ?? "(não é navegador ou não deu pra ler)"}
+                {"\n"}
+                {pr().ticket ? `Ticket ${pr().ticket![0]}${pr().ticket![1] ? ` · ${pr().ticket![1]}` : ""}` : "Nenhum ticket reconhecido"}
               </div>
             )}
           </Show>

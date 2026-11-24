@@ -11,6 +11,12 @@ use std::thread;
 use std::time::{Duration, Instant};
 use windows::Win32::System::StationsAndDesktops::{CloseDesktop, OpenInputDesktop, DESKTOP_ACCESS_FLAGS, DESKTOP_CONTROL_FLAGS};
 use windows::Win32::System::SystemInformation::GetLocalTime;
+use windows::Win32::Foundation::HWND;
+use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
+use windows::Win32::System::Variant::VARIANT;
+use windows::Win32::UI::Accessibility::{
+    CUIAutomation, IUIAutomation, IUIAutomationValuePattern, TreeScope_Descendants, UIA_ControlTypePropertyId, UIA_EditControlTypeId, UIA_ValuePatternId,
+};
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW};
 
 const DESKTOP_SWITCHDESKTOP: u32 = 0x0100;
@@ -26,6 +32,49 @@ fn locked() -> bool {
             Err(_) => true,
         }
     }
+}
+
+const BROWSERS: [&str; 6] = ["Brave", "Google Chrome", "Microsoft\u{200b} Edge", "Microsoft Edge", "Opera", "Vivaldi"];
+
+fn is_browser(title: &str) -> bool {
+    BROWSERS.iter().any(|b| title.ends_with(b))
+}
+
+/// Address-bar text of a Chromium browser window, through UI Automation (the window title only
+/// has the page title; Movidesk puts the ticket number in the address).
+fn browser_url(ua: &IUIAutomation, hwnd: HWND) -> Option<String> {
+    unsafe {
+        let root = ua.ElementFromHandle(hwnd).ok()?;
+        let cond = ua.CreatePropertyCondition(UIA_ControlTypePropertyId, &VARIANT::from(UIA_EditControlTypeId.0)).ok()?;
+        let edit = root.FindFirst(TreeScope_Descendants, &cond).ok()?;
+        let value: IUIAutomationValuePattern = edit.GetCurrentPatternAs(UIA_ValuePatternId).ok()?;
+        let url = value.CurrentValue().ok()?.to_string();
+        (url.contains('.') && !url.contains(' ')).then_some(url)
+    }
+}
+
+fn automation() -> Option<IUIAutomation> {
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED).ok();
+        CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()
+    }
+}
+
+/// Ticket number in a Movidesk address, e.g. "atak.movidesk.com/Ticket/EditByProtocol/202611034537".
+pub fn parse_ticket_url(url: &str) -> Option<String> {
+    let low = url.to_lowercase();
+    if !low.contains("movidesk") {
+        return None;
+    }
+    let path = &url[low.find("/ticket")?..];
+    path.split(|c: char| !c.is_ascii_digit()).rfind(|d| (4..=14).contains(&d.len())).map(str::to_string)
+}
+
+/// Title and (for a browser) address of the window in front.
+pub fn foreground() -> (String, Option<String>) {
+    let title = foreground_title();
+    let url = if is_browser(&title) { automation().and_then(|ua| browser_url(&ua, unsafe { GetForegroundWindow() })) } else { None };
+    (title, url)
 }
 
 pub fn foreground_title() -> String {
@@ -65,7 +114,7 @@ pub fn parse_ticket(title: &str, word: &str) -> Option<(String, String)> {
             }
             let len = i - start;
             let hashed = start > 0 && chars[start - 1] == '#';
-            if (4..=8).contains(&len) && best.is_none_or(|b| hashed && !b.2) {
+            if (4..=14).contains(&len) && best.is_none_or(|b| hashed && !b.2) {
                 best = Some((start, i, hashed));
             }
         } else {
@@ -120,6 +169,9 @@ fn tag(e: &work::Entry) -> String {
 pub fn spawn() {
     bus::keep("pc", json!({ "locked": false }));
     thread::spawn(|| {
+        let ua = automation();
+        let mut url: Option<String> = None;
+        let mut url_at = Instant::now();
         let mut was_locked = false;
         let mut locked_at = Instant::now();
         let mut paused_by_lock: Option<u64> = None;
@@ -179,9 +231,19 @@ pub fn spawn() {
             let title = foreground_title();
             if title != title_since.0 {
                 title_since = (title.clone(), Instant::now());
+                url = None;
             }
+            // The address is read once the tab settled, and again every few seconds (navigation keeps the title).
+            if is_browser(&title) && title_since.1.elapsed() >= Duration::from_secs(2) && (url.is_none() || url_at.elapsed() >= Duration::from_secs(4)) {
+                url = ua.as_ref().and_then(|ua| browser_url(ua, unsafe { GetForegroundWindow() }));
+                url_at = Instant::now();
+            }
+            let from_url = url.as_deref().and_then(parse_ticket_url).map(|n| {
+                let subject = parse_ticket(&title, &cfg.movidesk_palavra).map(|t| t.1).unwrap_or_default();
+                (n, subject)
+            });
             if title_since.1.elapsed() >= Duration::from_secs(3) {
-                if let Some((number, subject)) = parse_ticket(&title, &cfg.movidesk_palavra) {
+                if let Some((number, subject)) = from_url.or_else(|| parse_ticket(&title, &cfg.movidesk_palavra)) {
                     let already = running.is_some_and(|r| r.ticket == number);
                     if !already {
                         let known = entries.iter().rev().find(|e| e.ticket == number);
@@ -285,5 +347,8 @@ mod tests {
         );
         assert_eq!(parse_ticket("48230 | Sem acesso | Movidesk", "movidesk").map(|t| t.0), Some("48230".into()));
         assert_eq!(parse_ticket("YouTube - Google Chrome", "movidesk"), None);
+        assert_eq!(super::parse_ticket_url("atak.movidesk.com/Ticket/EditByProtocol/202611034537"), Some("202611034537".into()));
+        assert_eq!(super::parse_ticket_url("https://atak.movidesk.com/Ticket/Edit/48230?x=1"), Some("48230".into()));
+        assert_eq!(super::parse_ticket_url("atak.movidesk.com/Ticket"), None);
     }
 }
