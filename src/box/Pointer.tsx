@@ -3,7 +3,7 @@ import { onPointer } from "../lib/api";
 import { go, page } from "./App";
 
 type Ev =
-  | { t: "on" | "move"; x: number; y: number }
+  | { t: "on" | "move"; x: number; y: number; ts?: number }
   | { t: "off" }
   | { t: "down" | "up"; button: "left" | "right"; x: number; y: number }
   | { t: "wheel"; dy: number; x: number; y: number }
@@ -33,17 +33,61 @@ export function Pointer(): JSX.Element {
   const [shown, setShown] = createSignal(false);
   const [pressed, setPressed] = createSignal(false);
   let el!: HTMLDivElement;
-  // The newest position is drawn once per frame, straight on the element (no reactive layer).
-  const target = { x: 0, y: 0 };
+  /*
+   * The cable delivers moves in bursts, so drawing each one as it lands looks like skipped frames.
+   * Every move carries the PC's timestamp; the pointer is replayed a fixed few ms behind, on the
+   * PC's own timeline, interpolating between samples: even motion at the cost of a tiny delay.
+   */
+  // Playout delay follows how bursty delivery is right now (how late the latest samples arrive).
+  let jitter = 30;
+  const buf: { ts: number; x: number; y: number }[] = [];
+  let offset = Number.POSITIVE_INFINITY; // local clock − PC clock, smallest seen (the fastest delivery)
+  let offsetAt = 0;
   let frame = 0;
-  const draw = () => {
-    frame = 0;
-    if (el) el.style.transform = `translate3d(${target.x}px, ${target.y}px, 0)`;
+  const place = (x: number, y: number) => {
+    if (el) el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
   };
-  const setPos = (p: { x: number; y: number }) => {
-    target.x = p.x;
-    target.y = p.y;
-    if (!frame) frame = requestAnimationFrame(draw);
+  const tick = () => {
+    frame = requestAnimationFrame(tick);
+    if (!buf.length) return;
+    const t = performance.now() - offset - Math.min(120, Math.max(12, jitter * 1.15 + 6));
+    while (buf.length > 2 && buf[1].ts <= t) buf.shift();
+    const [a, b] = buf;
+    if (!b || t <= a.ts) return place(a.x, a.y);
+    if (t >= b.ts) return place(b.x, b.y);
+    const k = (t - a.ts) / (b.ts - a.ts);
+    place(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k);
+  };
+  const push = (p: { x: number; y: number }, ts?: number) => {
+    const local = performance.now();
+    if (ts == null) {
+      buf.length = 0;
+      buf.push({ ts: local - (Number.isFinite(offset) ? offset : 0), x: p.x, y: p.y });
+      return;
+    }
+    // Re-learn the clock link every few seconds (drift, sleep, the 49-day tick wrap).
+    if (local - ts < offset || local - offsetAt > 4000) {
+      if (Math.abs(local - ts - offset) > 1000) buf.length = 0;
+      offset = Math.min(local - ts, local - offsetAt > 4000 ? Infinity : offset);
+      offsetAt = local;
+    }
+    jitter = Math.max(local - ts - offset, jitter * 0.997);
+    if (buf.length && ts <= buf[buf.length - 1].ts) return;
+    buf.push({ ts, x: p.x, y: p.y });
+    if (buf.length > 120) buf.splice(0, buf.length - 120);
+  };
+  const start = () => {
+    if (!frame) frame = requestAnimationFrame(tick);
+  };
+  const stop = () => {
+    cancelAnimationFrame(frame);
+    frame = 0;
+    buf.length = 0;
+  };
+  const setPos = (p: { x: number; y: number }) => push(p);
+  const draw = () => {
+    const last = buf[buf.length - 1];
+    if (last) place(last.x, last.y);
   };
   let downAt: Element | null = null;
   let lastWheelPage = 0;
@@ -54,13 +98,17 @@ export function Pointer(): JSX.Element {
   onMount(() =>
     onPointer((raw) => {
       const e = raw as Ev;
-      if (e.t === "off") return void setShown(false);
+      if (e.t === "off") {
+        stop();
+        return void setShown(false);
+      }
       if (e.t === "on" || e.t === "move") {
-        setPos(px(e.x, e.y));
+        push(px(e.x, e.y), e.t === "move" ? e.ts : undefined);
         if (!shown()) {
           setShown(true);
           draw();
         }
+        start();
         return;
       }
       if (e.t === "down" || e.t === "up") {

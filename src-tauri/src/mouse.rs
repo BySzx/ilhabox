@@ -34,7 +34,8 @@ const SPAN_Y: f64 = 420.0;
 enum Ev {
     On(f64, f64),
     Off,
-    Move(f64, f64),
+    /// Position plus the system time of the movement (ms), so the phone can replay it evenly.
+    Move(f64, f64, u32),
     Button(&'static str, &'static str, f64, f64),
     Wheel(i32, f64, f64),
     Key(String),
@@ -177,7 +178,7 @@ unsafe extern "system" fn on_mouse(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT
             }
             h.x = h.x.clamp(0.0, 1.0);
             h.y = h.y.clamp(0.0, 1.0);
-            send(Ev::Move(h.x, h.y));
+            send(Ev::Move(h.x, h.y, m.time));
         }
         WM_LBUTTONDOWN => send(Ev::Button("down", "left", h.x, h.y)),
         WM_LBUTTONUP => send(Ev::Button("up", "left", h.x, h.y)),
@@ -268,20 +269,20 @@ unsafe extern "system" fn on_key(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
 
 /// Collapses runs of moves (only the latest position matters) and publishes the rest in order.
 fn forward(rx: Receiver<Ev>) {
-    let mut pending: Option<(f64, f64)> = None;
+    let mut pending: Option<(f64, f64, u32)> = None;
     loop {
         let ev = match pending {
-            Some(_) => rx.recv_timeout(Duration::from_millis(6)).ok(),
+            Some(_) => rx.recv_timeout(Duration::from_millis(4)).ok(),
             None => rx.recv().ok(),
         };
-        let flush = |p: &mut Option<(f64, f64)>| {
-            if let Some((x, y)) = p.take() {
-                fast::send(&json!({ "t": "move", "x": x, "y": y }).to_string());
+        let flush = |p: &mut Option<(f64, f64, u32)>| {
+            if let Some((x, y, ts)) = p.take() {
+                fast::send(&json!({ "t": "move", "x": x, "y": y, "ts": ts }).to_string());
             }
         };
         match ev {
             None => flush(&mut pending),
-            Some(Ev::Move(x, y)) => pending = Some((x, y)),
+            Some(Ev::Move(x, y, ts)) => pending = Some((x, y, ts)),
             Some(other) => {
                 flush(&mut pending);
                 let v = match other {
