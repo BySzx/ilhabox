@@ -60,7 +60,7 @@ export function seed(f: Fire): void {
   fire("media", media);
   fire("media-art", { key: "x", dataUrl: null });
   fire("whats-history", msgs);
-  fire("phone", { status: "conectado", serial: "R58N", modelo: "SM A105M", easypac: "br.com.easypac.app", appVersao: 1, erro: "" });
+  fire("phone", { status: "conectado", serial: "R58N", modelo: "SM A105M", easypacs: ["br.com.easypac.monitoramento", "br.com.easypac.supervisor"], appVersao: 1, erro: "" });
   fire("update", { current: "0.1.0", version: null });
   setTimeout(() => fire("whats", { id: 4, at: Date.now(), chat: "Marina (Comercial)", text: "Consegue olhar agora?", avatar: null }), 2500);
   if (new URLSearchParams(location.search).has("sugestao"))

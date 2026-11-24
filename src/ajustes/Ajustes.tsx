@@ -128,10 +128,10 @@ export function Ajustes(): JSX.Element {
             </select>
           </label>
           <label class="field">
-            Pacote do app EasyPac
+            Apps EasyPac no celular (pacotes separados por vírgula; vazio = acha sozinho)
             <input
               class="mono"
-              placeholder={phoneState().easypac ? `achado: ${phoneState().easypac}` : "achado sozinho pelo nome"}
+              placeholder={phoneState().easypacs.length ? `achados: ${phoneState().easypacs.join(", ")}` : "achados sozinhos pelo nome"}
               value={draft.easypacPacote}
               onInput={(e) => edit(() => setDraft("easypacPacote", e.currentTarget.value.trim()))}
             />

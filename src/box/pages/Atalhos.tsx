@@ -2,7 +2,7 @@ import { Check, ChevronLeft, ChevronRight, ClipboardCopy, Globe, House, MessageC
 import { createSignal, For, Show, type JSX } from "solid-js";
 import { unwrap } from "solid-js/store";
 import { cmd, phone } from "../../lib/api";
-import { config, dayText, phoneState, startOfDay, type Atalho } from "../../lib/state";
+import { appName, config, dayText, phoneState, startOfDay, type Atalho } from "../../lib/state";
 import { feedback, note } from "../ui";
 
 const ICON: Record<Atalho["tipo"], (p: { size: number }) => JSX.Element> = {
@@ -59,11 +59,24 @@ export function Atalhos(): JSX.Element {
       </div>
       <div class="tiles">
         <Show when={!editing()}>
-          <button class="tile sys easypac" onClick={() => void cmd("abrir_easypac").then(() => note("Abrindo o EasyPac"), feedback)}>
-            <Smartphone size={26} />
-            <b>Abrir EasyPac</b>
-            <span>{phoneState().easypac || "app não encontrado"}</span>
-          </button>
+          <For
+            each={phoneState().easypacs}
+            fallback={
+              <div class="tile sys easypac off">
+                <Smartphone size={26} />
+                <b>EasyPac</b>
+                <span>nenhum app EasyPac achado no celular</span>
+              </div>
+            }
+          >
+            {(pkg) => (
+              <button class="tile sys easypac" onClick={() => void cmd("abrir_celular_app", { pacote: pkg }).then(() => note(`Abrindo ${appName(pkg)}`), feedback)}>
+                <Smartphone size={26} />
+                <b>{appName(pkg)}</b>
+                <span>{pkg}</span>
+              </button>
+            )}
+          </For>
           <button class="tile sys" onClick={home}>
             <House size={26} />
             <b>Celular normal</b>

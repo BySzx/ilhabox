@@ -37,7 +37,8 @@ pub struct Phone {
     pub status: String,
     pub serial: String,
     pub modelo: String,
-    pub easypac: String,
+    /// Every EasyPac app on the phone (Supervisor, Monitoramento…).
+    pub easypacs: Vec<String>,
     pub app_versao: u32,
     pub erro: String,
 }
@@ -137,15 +138,18 @@ fn installed_version(exe: &Path, serial: &str) -> u32 {
         .unwrap_or(0)
 }
 
-fn find_easypac(exe: &Path, serial: &str) -> String {
-    let set = config::get().easypac_pacote;
+/// EasyPac apps on the phone: the packages set in the settings (comma-separated), or every
+/// package with "easypac" in its name.
+fn find_easypacs(exe: &Path, serial: &str) -> Vec<String> {
+    let set: Vec<String> = config::get().easypac_pacote.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect();
     if !set.is_empty() {
         return set;
     }
-    shell(exe, serial, &["pm", "list", "packages"])
-        .ok()
-        .and_then(|out| out.lines().filter_map(|l| l.trim().strip_prefix("package:")).find(|p| p.to_lowercase().contains("easypac")).map(str::to_string))
-        .unwrap_or_default()
+    let mut found: Vec<String> = shell(exe, serial, &["pm", "list", "packages"])
+        .map(|out| out.lines().filter_map(|l| l.trim().strip_prefix("package:")).filter(|p| p.to_lowercase().contains("easypac")).map(str::to_string).collect())
+        .unwrap_or_default();
+    found.sort();
+    found
 }
 
 fn tunnel(exe: &Path, serial: &str) -> Result<String, String> {
@@ -193,13 +197,13 @@ fn setup(app: &AppHandle, exe: &Path, serial: &str, model: &str, key: &str) -> P
     if let Err(e) = give_key(exe, serial, key) {
         diag::log(&format!("chave nao entregue: {e}"));
     }
-    p.easypac = find_easypac(exe, serial);
+    p.easypacs = find_easypacs(exe, serial);
     if config::get().abrir_ao_conectar {
         if let Err(e) = open_app(exe, serial) {
             diag::log(&format!("nao abriu o app: {e}"));
         }
     }
-    diag::log(&format!("celular conectado {serial} modelo={model} app=v{} easypac={:?}", p.app_versao, p.easypac));
+    diag::log(&format!("celular conectado {serial} modelo={model} app=v{} easypac={:?}", p.app_versao, p.easypacs));
     Phone { status: "conectado".into(), ..p }
 }
 

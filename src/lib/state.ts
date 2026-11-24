@@ -22,7 +22,7 @@ export type Config = {
 };
 export type Action = { label: string; cmd?: string; args?: Record<string, unknown>; go?: string };
 export type Suggestion = { id: string; text: string; detail: string; actions: Action[]; at: number };
-export type Phone = { status: string; serial: string; modelo: string; easypac: string; appVersao: number; erro: string };
+export type Phone = { status: string; serial: string; modelo: string; easypacs: string[]; appVersao: number; erro: string };
 export type Update = { current: string; version: string | null; progress?: number | null; erro?: string };
 
 // ------------------------------------------------------------------ media + lyrics
@@ -80,7 +80,17 @@ export const [config, setConfig] = createStore<Config>({
 });
 export const [suggestion, setSuggestion] = createSignal<Suggestion | null>(null);
 export const [pcLocked, setPcLocked] = createSignal(false);
-export const [phoneState, setPhoneState] = createSignal<Phone>({ status: "desconectado", serial: "", modelo: "", easypac: "", appVersao: 0, erro: "" });
+export const [phoneState, setPhoneState] = createSignal<Phone>({ status: "desconectado", serial: "", modelo: "", easypacs: [], appVersao: 0, erro: "" });
+
+/** "br.com.easypac.monitoramento" → "Monitoramento" (no labels over adb, so the package name tells). */
+export function appName(pkg: string): string {
+  const low = pkg.toLowerCase();
+  if (low.includes("superv")) return "Supervisor";
+  if (low.includes("monit")) return "Monitoramento";
+  const skip = new Set(["com", "br", "app", "android", "mobile", "easypac", "prod", "release"]);
+  const part = pkg.split(".").filter((x) => !skip.has(x.toLowerCase())).pop() ?? pkg;
+  return part.charAt(0).toUpperCase() + part.slice(1);
+}
 export const [update, setUpdate] = createSignal<Update>({ current: "", version: null });
 export const [loaded, setLoaded] = createSignal(false);
 
