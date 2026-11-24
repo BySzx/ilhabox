@@ -1,15 +1,16 @@
 import { Check, Pause, Play, Plus, SkipForward } from "lucide-solid";
 import { createMemo, For, Show, type JSX } from "solid-js";
-import { art, clock, config, control, dur, entriesOf, isTicket, length, media, msgs, now, paused, running, startOfDay, tag } from "../../lib/state";
-import { finish, pause, resume } from "./Horas";
+import { art, clock, config, control, dur, entriesOf, isLunch, isTicket, length, media, msgs, now, paused, pending as toPost, running, startOfDay, tag, worked } from "../../lib/state";
+import { backFromLunch, finish, pause, resume } from "./Horas";
+import { feedback } from "../ui";
 import { go } from "../App";
 import { ago, initials, tint } from "../whatsUi";
 
 export function Inicio(): JSX.Element {
   const today = createMemo(() => entriesOf(startOfDay(now())));
-  const total = () => today().reduce((s, e) => s + length(e, now()), 0);
+  const total = () => worked(today(), now());
   const goal = () => Math.max(1, config.metaMin) * 60000;
-  const pending = () => today().filter((e) => e.done && !e.sent).length;
+  const pending = () => toPost(today()).length;
   const date = () => new Date(now()).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
   const recent = () => msgs().slice(-3).reverse();
 
@@ -75,12 +76,19 @@ export function Inicio(): JSX.Element {
               </div>
               <div class="watch mono">{clock(length(r(), now()))}</div>
               <div class="row" onClick={(e) => e.stopPropagation()}>
+                <Show when={isLunch(r())}>
+                  <button class="btn green" onClick={() => void backFromLunch(r()).catch(feedback)}>
+                    <Play size={16} /> Voltei do almoço
+                  </button>
+                </Show>
+                <Show when={!isLunch(r())}>
                 <button class="btn amber" onClick={pause}>
                   <Pause size={16} /> Pausar
                 </button>
                 <button class="btn red" onClick={() => finish(r().id)}>
                   <Check size={16} /> Concluir
                 </button>
+                </Show>
               </div>
             </>
           )}

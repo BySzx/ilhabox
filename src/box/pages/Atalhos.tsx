@@ -89,6 +89,10 @@ export function Atalhos(): JSX.Element {
                 classList={{ editing: editing() }}
                 style={{ "--c": a.cor || "#60a5fa" }}
                 onClick={() => (editing() ? setSheet({ a: { ...a }, index: i() }) : run(a))}
+                onContextMenu={(ev) => {
+                  ev.preventDefault();
+                  setSheet({ a: { ...a }, index: i() });
+                }}
               >
                 <Icon size={24} />
                 <Show when={editing()}>

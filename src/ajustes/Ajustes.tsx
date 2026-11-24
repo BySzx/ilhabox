@@ -32,6 +32,7 @@ export function Ajustes(): JSX.Element {
   const [dirty, setDirty] = createSignal(false);
   const [saved, setSaved] = createSignal("");
   const [auto, setAuto] = createSignal(false);
+  const [probe, setProbe] = createSignal<{ title: string; ticket: [string, string] | null } | null>(null);
 
   // A fresh copy whenever the agent sends the config, unless there are unsaved edits.
   createEffect(on(() => JSON.stringify(config), () => !dirty() && setDraft(reconcile(structuredClone(unwrap(config))))));
@@ -44,7 +45,9 @@ export function Ajustes(): JSX.Element {
   };
   const save = async () => {
     try {
-      await cmd("config_set", structuredClone(unwrap(draft)) as unknown as Record<string, unknown>);
+      const clean = structuredClone(unwrap(draft));
+      clean.checklists = clean.checklists.map((c) => ({ nome: c.nome.trim(), itens: c.itens.map((x) => x.trim()).filter(Boolean) })).filter((c) => c.nome);
+      await cmd("config_set", clean as unknown as Record<string, unknown>);
       setDirty(false);
       setSaved("Salvo");
     } catch (e) {
@@ -217,6 +220,86 @@ export function Ajustes(): JSX.Element {
               )}
             </For>
           </div>
+        </section>
+
+        <section class="box">
+          <h2>Automático</h2>
+          <div class="row">
+            <label class="field small">
+              Início do turno
+              <input type="time" value={draft.inicioTurno} onChange={(e) => edit(() => setDraft("inicioTurno", e.currentTarget.value))} />
+            </label>
+            <label class="field small">
+              Fim do turno
+              <input type="time" value={draft.fimTurno} onChange={(e) => edit(() => setDraft("fimTurno", e.currentTarget.value))} />
+            </label>
+          </div>
+          <div class="row">
+            <label class="field small">
+              Avisar parado após (min)
+              <input type="number" min="0" value={draft.lembreteMin} onInput={(e) => edit(() => setDraft("lembreteMin", Number(e.currentTarget.value) || 0))} />
+            </label>
+            <label class="field small">
+              "Ainda nisso?" após (min)
+              <input type="number" min="0" value={draft.lembreteLongoMin} onInput={(e) => edit(() => setDraft("lembreteLongoMin", Number(e.currentTarget.value) || 0))} />
+            </label>
+            <label class="field small">
+              WhatsApp na frente por (min)
+              <input type="number" min="0" value={draft.whatsMin} onInput={(e) => edit(() => setDraft("whatsMin", Number(e.currentTarget.value) || 0))} />
+            </label>
+          </div>
+          <span class="hint">0 desliga o aviso.</span>
+          <label class="toggle">
+            <input type="checkbox" checked={draft.pausarAoTravar} onChange={(e) => edit(() => setDraft("pausarAoTravar", e.currentTarget.checked))} />
+            Pausar o apontamento e apagar a tela do celular quando travar o PC (Win+L)
+          </label>
+          <label class="field">
+            Palavra que identifica a janela do Movidesk
+            <input value={draft.movideskPalavra} onInput={(e) => edit(() => setDraft("movideskPalavra", e.currentTarget.value.trim()))} />
+          </label>
+          <div class="row">
+            <button class="btn sm" onClick={() => setTimeout(() => void cmd<{ title: string; ticket: [string, string] | null }>("janela_atual").then(setProbe, () => undefined), 4000)}>
+              Testar em 4 s
+            </button>
+            <span class="hint">Clique, vá pra aba do ticket no navegador e espere.</span>
+          </div>
+          <Show when={probe()}>
+            {(pr) => (
+              <div class="preview">
+                Janela: {pr().title || "(sem título)"}
+                {"\n"}
+                {pr().ticket ? `Ticket ${pr().ticket![0]} · ${pr().ticket![1] || "sem assunto"}` : "Nenhum ticket reconhecido"}
+              </div>
+            )}
+          </Show>
+        </section>
+
+        <section class="box">
+          <h2>
+            Checklists
+            <span class="grow" />
+            <button class="btn sm" onClick={() => edit(() => setDraft("checklists", (l) => [...l, { nome: "Nova checklist", itens: [] }]))}>
+              <Plus size={15} /> Nova
+            </button>
+          </h2>
+          <For each={draft.checklists}>
+            {(c, i) => (
+              <div class="atalho">
+                <input class="name" style={{ "grid-column": "1 / 3" }} value={c.nome} onInput={(e) => edit(() => setDraft("checklists", i(), "nome", e.currentTarget.value))} />
+                <div class="a-act">
+                  <button class="icon danger" onClick={() => edit(() => setDraft("checklists", (l) => l.filter((_, j) => j !== i())))} aria-label="Apagar">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+                <textarea
+                  rows={Math.max(3, c.itens.length)}
+                  placeholder="Um item por linha"
+                  value={c.itens.join("\n")}
+                  onInput={(e) => edit(() => setDraft("checklists", i(), "itens", e.currentTarget.value.split("\n")))}
+                />
+              </div>
+            )}
+          </For>
         </section>
 
         <section class="box">

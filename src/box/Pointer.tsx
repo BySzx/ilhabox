@@ -90,6 +90,8 @@ export function Pointer(): JSX.Element {
     if (last) place(last.x, last.y);
   };
   let downAt: Element | null = null;
+  // Holding the button and moving drags: scrolls the list under the pointer (or flips pages).
+  let drag: { x: number; y: number; box: HTMLElement | null; moved: boolean; lastY: number } | null = null;
   let lastWheelPage = 0;
 
   const px = (x: number, y: number) => ({ x: x * innerWidth, y: y * innerHeight });
@@ -103,7 +105,13 @@ export function Pointer(): JSX.Element {
         return void setShown(false);
       }
       if (e.t === "on" || e.t === "move") {
-        push(px(e.x, e.y), e.t === "move" ? e.ts : undefined);
+        const p = px(e.x, e.y);
+        if (drag) {
+          if (!drag.moved && Math.hypot(p.x - drag.x, p.y - drag.y) > 8) drag.moved = true;
+          if (drag.moved && drag.box) drag.box.scrollTop -= p.y - drag.lastY;
+          drag.lastY = p.y;
+        }
+        push(p, e.t === "move" ? e.ts : undefined);
         if (!shown()) {
           setShown(true);
           draw();
@@ -114,14 +122,26 @@ export function Pointer(): JSX.Element {
       if (e.t === "down" || e.t === "up") {
         const p = px(e.x, e.y);
         setPos(p);
-        if (e.button !== "left") return;
         const at = hit(p.x, p.y);
+        if (e.button === "right") {
+          if (e.t === "up" && at) at.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: 2, view: window }));
+          return;
+        }
         if (e.t === "down") {
           setPressed(true);
           downAt = at;
+          drag = { x: p.x, y: p.y, box: scrollable(at), moved: false, lastY: p.y };
           return;
         }
         setPressed(false);
+        const d = drag;
+        drag = null;
+        if (d?.moved) {
+          // A sideways drag over something that does not scroll flips the page.
+          const dx = p.x - d.x;
+          if (!d.box && Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(p.y - d.y)) go(ORDER[Math.min(ORDER.length - 1, Math.max(0, page() + (dx < 0 ? 1 : -1)))]);
+          return;
+        }
         if (!at || (downAt && !downAt.contains(at) && !at.contains(downAt))) return;
         if (editable(at)) {
           at.focus();

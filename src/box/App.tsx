@@ -2,13 +2,14 @@ import { Clock3, House, LayoutGrid, MessageCircle, Music, Download } from "lucid
 import { createSignal, For, onMount, Show, type JSX } from "solid-js";
 import { cmd, online, phone } from "../lib/api";
 import { rgba } from "../lib/color";
-import { artColor, clock, length, now, onNewMessage, paused, running, tag, toast, update } from "../lib/state";
+import { artColor, clock, isLunch, length, now, onNewMessage, paused, running, tag, toast, update } from "../lib/state";
 import { Atalhos } from "./pages/Atalhos";
 import { Horas } from "./pages/Horas";
 import { Inicio } from "./pages/Inicio";
 import { Musica } from "./pages/Musica";
 import { Whats } from "./pages/Whats";
 import { Pointer } from "./Pointer";
+import { Resting, SuggestionCard } from "./Suggest";
 import { feedback, note, Notes } from "./ui";
 import { initials, tint } from "./whatsUi";
 
@@ -59,7 +60,7 @@ export function App(): JSX.Element {
           }
         >
           {(r) => (
-            <button class="pill" onClick={() => go("horas")}>
+            <button class="pill" classList={{ lunchpill: isLunch(r()) }} onClick={() => go("horas")}>
               <span class="rec" />
               <span class="mono">{clock(length(r(), now()))}</span>
               <span class="dim">{tag(r())}</span>
@@ -108,7 +109,9 @@ export function App(): JSX.Element {
         )}
       </Show>
 
+      <SuggestionCard />
       <Notes />
+      <Resting />
       <Pointer />
 
       <Show when={!online()}>

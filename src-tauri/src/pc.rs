@@ -5,7 +5,7 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 use windows::Win32::Foundation::{HANDLE, HGLOBAL};
-use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
+use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData};
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 use windows::Win32::System::Ole::CF_UNICODETEXT;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -51,6 +51,30 @@ pub fn set_clipboard(text: &str) -> Result<(), String> {
         })();
         let _ = CloseClipboard();
         r
+    }
+}
+
+/// Text on the PC clipboard (for Ctrl+V with the mouse on the phone).
+pub fn get_clipboard() -> Option<String> {
+    unsafe {
+        OpenClipboard(None).ok()?;
+        let text = (|| {
+            let h = GetClipboardData(CF_UNICODETEXT.0 as u32).ok()?;
+            let g = HGLOBAL(h.0);
+            let p = GlobalLock(g) as *const u16;
+            if p.is_null() {
+                return None;
+            }
+            let mut n = 0usize;
+            while *p.add(n) != 0 && n < 1 << 20 {
+                n += 1;
+            }
+            let s = String::from_utf16_lossy(std::slice::from_raw_parts(p, n));
+            let _ = GlobalUnlock(g);
+            Some(s)
+        })();
+        let _ = CloseClipboard();
+        text
     }
 }
 

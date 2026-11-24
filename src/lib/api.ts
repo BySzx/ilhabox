@@ -71,7 +71,7 @@ export async function connect(): Promise<void> {
     const all = JSON.parse((e as MessageEvent<string>).data) as Record<string, unknown>;
     for (const [topic, v] of Object.entries(all)) fire(topic, v);
   });
-  for (const topic of ["media", "media-art", "whats", "whats-history", "work", "config", "phone", "update", "server"]) {
+  for (const topic of ["media", "media-art", "whats", "whats-history", "work", "config", "phone", "update", "server", "sugestao", "pc"]) {
     es.addEventListener(topic, (e) => fire(topic, JSON.parse((e as MessageEvent<string>).data)));
   }
   es.onerror = () => setOnline(false);
@@ -93,5 +93,5 @@ export function onPointer(fn: (v: unknown) => void): void {
 }
 
 /** The Android shell's bridge (absent in the PC window and in a desktop browser). */
-type Bridge = { home(): void; vibrate(ms: number): void; version(): string };
+type Bridge = { home(): void; vibrate(ms: number): void; version(): string; dim?(on: boolean): void };
 export const phone: Bridge | undefined = (window as unknown as { IlhaBoxApp?: Bridge }).IlhaBoxApp;

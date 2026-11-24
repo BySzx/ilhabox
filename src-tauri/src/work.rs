@@ -31,6 +31,8 @@ pub struct Entry {
     pub ticket: String,
     pub desc: String,
     pub segs: Vec<Seg>,
+    /// Checklist items ticked during the work (go into the Movidesk text).
+    pub check: Vec<String>,
     /// Concluded: no longer paused, counts as "to post in Movidesk".
     pub done: bool,
     /// Marked once it was pasted into Movidesk.
@@ -41,7 +43,7 @@ pub struct Entry {
 }
 
 impl Entry {
-    fn running(&self) -> bool {
+    pub fn running(&self) -> bool {
         self.segs.last().is_some_and(|s| s.e.is_none())
     }
 
@@ -134,6 +136,34 @@ fn s(args: &Value, k: &str) -> Option<String> {
     args.get(k).and_then(Value::as_str).map(|v| v.trim().to_string())
 }
 
+/// Copy of the entries, for the watcher's reminders and suggestions.
+pub fn snapshot() -> Vec<Entry> {
+    BOOK.lock().as_ref().map(|(_, b)| b.entries.clone()).unwrap_or_default()
+}
+
+/// Pauses what is running and says which one it was (the PC got locked).
+pub fn pause_running() -> Option<u64> {
+    let id = snapshot().into_iter().find(Entry::running).map(|e| e.id)?;
+    pause().ok()?;
+    Some(id)
+}
+
+/// A finished entry typed in afterwards (filling a gap of the day).
+pub fn add(args: &Value) -> Result<Value, String> {
+    let tipo = s(args, "tipo").filter(|t| !t.is_empty()).unwrap_or_else(|| "Ticket".into());
+    let ticket = if tipo == "Ticket" { s(args, "ticket").unwrap_or_default() } else { String::new() };
+    let desc = s(args, "desc").unwrap_or_default();
+    let segs: Vec<Seg> = args.get("segs").cloned().and_then(|v| serde_json::from_value(v).ok()).ok_or("sem horário")?;
+    if segs.is_empty() || segs.iter().any(|g| g.e.is_none_or(|e| e <= g.s)) {
+        return Err("horário inválido".into());
+    }
+    with(|b| {
+        let e = Entry { id: next_id(b), tipo, ticket, desc, segs, done: true, ..Default::default() };
+        b.entries.push(e);
+        Ok(Value::Null)
+    })
+}
+
 /// New activity; the one running is paused, not concluded.
 pub fn start(args: &Value) -> Result<Value, String> {
     let tipo = s(args, "tipo").filter(|t| !t.is_empty()).unwrap_or_else(|| "Ticket".into());
@@ -206,6 +236,9 @@ pub fn update(args: &Value) -> Result<Value, String> {
         }
         if let Some(v) = args.get("sent").and_then(Value::as_bool) {
             e.sent = v;
+        }
+        if let Some(v) = args.get("check").and_then(Value::as_array) {
+            e.check = v.iter().filter_map(Value::as_str).map(str::to_string).collect();
         }
         if let Some(list) = args.get("segs") {
             let mut segs: Vec<Seg> = serde_json::from_value(list.clone()).map_err(|_| "períodos inválidos")?;

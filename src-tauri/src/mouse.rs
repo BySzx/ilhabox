@@ -40,6 +40,8 @@ enum Ev {
     Wheel(i32, f64, f64),
     Key(String),
     Text(String),
+    /// Ctrl+V: the PC clipboard is typed on the phone.
+    Paste,
 }
 
 struct Hook {
@@ -256,6 +258,10 @@ unsafe extern "system" fn on_key(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
         state[VK_CAPITAL.0 as usize] = 1;
     }
     let ctrl_only = down(VK_CONTROL) && !down(VK_MENU);
+    if ctrl_only && k.vkCode == 0x56 {
+        send(Ev::Paste);
+        return LRESULT(1);
+    }
     let mut buf = [0u16; 8];
     let n = ToUnicode(k.vkCode, k.scanCode, Some(&state), &mut buf, 0x4);
     if n > 0 && !ctrl_only {
@@ -292,6 +298,10 @@ fn forward(rx: Receiver<Ev>) {
                     Ev::Wheel(d, x, y) => json!({ "t": "wheel", "dy": d, "x": x, "y": y }),
                     Ev::Key(k) => json!({ "t": "key", "key": k }),
                     Ev::Text(s) => json!({ "t": "text", "text": s }),
+                    Ev::Paste => match crate::pc::get_clipboard() {
+                        Some(s) if !s.is_empty() => json!({ "t": "text", "text": s }),
+                        _ => continue,
+                    },
                     Ev::Move(..) => continue,
                 };
                 fast::send(&v.to_string());

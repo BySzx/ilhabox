@@ -51,6 +51,13 @@ pub fn run(app: &AppHandle, name: &str, args: Value) -> Result<Value, String> {
         "work_pause" => work::pause(),
         "work_resume" => work::resume(&args),
         "work_update" => work::update(&args),
+        "work_add" => work::add(&args),
+        "janela_atual" => {
+            let title = crate::watch::foreground_title();
+            let ticket = crate::watch::parse_ticket(&title, &config::get().movidesk_palavra);
+            Ok(json!({ "title": title, "ticket": ticket }))
+        }
+        "sugestao_fechar" => crate::watch::dismiss(&str_arg(&args, "id")),
         "work_delete" => work::remove(&args),
         "work_sent" => work::mark_sent(&args),
         "copiar" => pc::set_clipboard(&str_arg(&args, "texto")).map(|_| Value::Null),

@@ -12,12 +12,16 @@ export type Media = {
 };
 export type WMsg = { id: number; at: number; chat: string; text: string; avatar: string | null };
 export type Seg = { s: number; e: number | null };
-export type Entry = { id: number; tipo: string; ticket: string; desc: string; segs: Seg[]; done: boolean; start: number; end: number | null; sent: boolean };
+export type Entry = { id: number; tipo: string; ticket: string; desc: string; segs: Seg[]; check?: string[]; done: boolean; start: number; end: number | null; sent: boolean };
 export type Atalho = { id: string; nome: string; tipo: "texto" | "site" | "programa" | "celular"; valor: string; colar: boolean; cor: string };
 export type Config = {
   atalhos: Atalho[]; modelo: string; tipos: string[]; metaMin: number; abrirAoConectar: boolean;
   easypacPacote: string; inicioTurno: string; fimTurno: string; mouseLado: string;
+  movideskPalavra: string; lembreteMin: number; lembreteLongoMin: number; whatsMin: number; pausarAoTravar: boolean;
+  checklists: { nome: string; itens: string[] }[];
 };
+export type Action = { label: string; cmd?: string; args?: Record<string, unknown>; go?: string };
+export type Suggestion = { id: string; text: string; detail: string; actions: Action[]; at: number };
 export type Phone = { status: string; serial: string; modelo: string; easypac: string; appVersao: number; erro: string };
 export type Update = { current: string; version: string | null; progress?: number | null; erro?: string };
 
@@ -69,10 +73,13 @@ export const isRunning = (e: Entry): boolean => e.segs.length > 0 && e.segs[e.se
 export const isPaused = (e: Entry): boolean => !e.done && !isRunning(e);
 export const running = createMemo(() => entries().find(isRunning) ?? null);
 /** Paused activities, most recently touched first. */
-export const paused = createMemo(() => entries().filter(isPaused).sort((a, b) => lastEnd(b) - lastEnd(a)));
+export const paused = createMemo(() => entries().filter((e) => isPaused(e) && !isLunch(e)).sort((a, b) => lastEnd(b) - lastEnd(a)));
 export const [config, setConfig] = createStore<Config>({
   atalhos: [], modelo: "", tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"], metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
+  movideskPalavra: "movidesk", lembreteMin: 10, lembreteLongoMin: 120, whatsMin: 2, pausarAoTravar: true, checklists: [],
 });
+export const [suggestion, setSuggestion] = createSignal<Suggestion | null>(null);
+export const [pcLocked, setPcLocked] = createSignal(false);
 export const [phoneState, setPhoneState] = createSignal<Phone>({ status: "desconectado", serial: "", modelo: "", easypac: "", appVersao: 0, erro: "" });
 export const [update, setUpdate] = createSignal<Update>({ current: "", version: null });
 export const [loaded, setLoaded] = createSignal(false);
@@ -101,6 +108,11 @@ export function initState(): void {
   on<Config>("config", (c) => setConfig(reconcile(c)));
   on<Phone>("phone", setPhoneState);
   on<Update>("update", setUpdate);
+  on<Suggestion | null>("sugestao", (v) => {
+    setSuggestion(v);
+    if (v) newListeners.forEach((fn) => fn({ id: -1, at: v.at, chat: "", text: v.text, avatar: null }));
+  });
+  on<{ locked: boolean }>("pc", (v) => setPcLocked(!!v?.locked));
   setInterval(() => setNow(Date.now()), 250);
 }
 
@@ -134,6 +146,11 @@ export function clock(ms: number): string {
 }
 
 export const length = (e: Entry, at = now()): number => e.segs.reduce((sum, g) => sum + ((g.e ?? at) - g.s), 0);
+/** Lunch is timed (so it shows on the day) but is not work: no totals, no Movidesk. */
+export const LUNCH = "Almoço";
+export const isLunch = (e: Pick<Entry, "tipo">): boolean => e.tipo === LUNCH;
+export const worked = (list: Entry[], at = now()): number => list.filter((e) => !isLunch(e)).reduce((s, e) => s + length(e, at), 0);
+export const pending = (list: Entry[]): Entry[] => list.filter((e) => e.done && !e.sent && !isLunch(e));
 export const lastEnd = (e: Entry): number => e.segs[e.segs.length - 1]?.e ?? Date.now();
 /** "13:35–13:45, 14:31–14:50" */
 export const periods = (e: Entry, at = Date.now()): string => e.segs.map((g) => `${hhmm(g.s)}–${hhmm(g.e ?? at)}`).join(", ");
@@ -161,7 +178,7 @@ export function segText(e: Entry, g: Seg): string {
     .split("{atividade}").join(activity(e))
     .split("{tipo}").join(kind(e))
     .split("{ticket}").join(e.ticket || "")
-    .split("{descricao}").join(e.desc || "")
+    .split("{descricao}").join(describe(e))
     .split("{periodos}").join(`${hhmm(g.s)}–${hhmm(end)}`)
     .split("{inicio}").join(hhmm(g.s))
     .split("{fim}").join(hhmm(end))
@@ -171,6 +188,12 @@ export function segText(e: Entry, g: Seg): string {
     .trim();
 }
 
+/** Description plus the checklist items ticked during the work. */
+export function describe(e: Entry): string {
+  const checked = e.check ?? [];
+  return [e.desc, checked.length ? `Verificado: ${checked.join("; ")}` : ""].filter(Boolean).join("\n");
+}
+
 /** One Movidesk text per period. */
 export const entryTexts = (e: Entry): string[] => e.segs.map((g) => segText(e, g));
 export const entryText = (e: Entry): string => entryTexts(e).join("\n\n");
@@ -178,17 +201,49 @@ export const entryText = (e: Entry): string => entryTexts(e).join("\n\n");
 /** Time per kind of activity, biggest first. */
 export function byKind(list: Entry[], at = Date.now()): [string, number][] {
   const m = new Map<string, number>();
-  for (const e of list) m.set(kind(e), (m.get(kind(e)) ?? 0) + length(e, at));
+  for (const e of list.filter((x) => !isLunch(x))) m.set(kind(e), (m.get(kind(e)) ?? 0) + length(e, at));
   return [...m.entries()].sort((a, b) => b[1] - a[1]);
 }
 
 export function dayText(day: number): string {
-  const list = entriesOf(day);
-  const total = list.reduce((s, e) => s + length(e, Date.now()), 0);
+  const list = entriesOf(day).filter((e) => !isLunch(e));
+  const total = worked(list, Date.now());
   const lines = list
     .flatMap((e) => e.segs.map((g) => ({ e, g })))
     .sort((a, b) => a.g.s - b.g.s)
     .map(({ e, g }) => `• ${hhmm(g.s)}–${hhmm(g.e ?? Date.now())} (${dur((g.e ?? Date.now()) - g.s)}) ${activity(e)}${e.desc ? ` — ${e.desc}` : ""}${g.e == null ? " [em andamento]" : ""}`);
   const kinds = byKind(list).map(([k, ms]) => `${k} ${dur(ms)}`).join(" · ");
   return [`Resumo de ${ddmmyyyy(day)}`, ...lines, `Total: ${dur(total)}${kinds ? ` (${kinds})` : ""}`].join("\n");
+}
+
+// ------------------------------------------------------------------ shift and gaps
+
+export function atClock(day: number, hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  const d = new Date(day);
+  d.setHours(h || 0, m || 0, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * Stretches of the shift with nothing timed (≥ 5 min), from the first activity of the day until
+ * now (today) or the end of the shift. Before the first activity is "not started yet", not a gap.
+ */
+export function gaps(day: number, at = now()): { s: number; e: number }[] {
+  const from = atClock(day, config.inicioTurno || "08:00");
+  const to = Math.min(atClock(day, config.fimTurno || "18:00"), at);
+  const busy = entries()
+    .flatMap((e) => e.segs)
+    .map((g) => ({ s: g.s, e: g.e ?? at }))
+    .filter((g) => g.e > from && g.s < to)
+    .sort((a, b) => a.s - b.s);
+  if (!busy.length || to <= from) return [];
+  const out: { s: number; e: number }[] = [];
+  let cur = Math.max(from, busy[0].s);
+  for (const g of busy) {
+    if (g.s - cur >= 5 * 60000) out.push({ s: cur, e: g.s });
+    cur = Math.max(cur, g.e);
+  }
+  if (to - cur >= 5 * 60000) out.push({ s: cur, e: to });
+  return out;
 }

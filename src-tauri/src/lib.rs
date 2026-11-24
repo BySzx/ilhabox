@@ -13,6 +13,7 @@ mod mouse;
 mod pc;
 mod server;
 mod update;
+mod watch;
 mod whats;
 mod work;
 
@@ -107,6 +108,7 @@ pub fn run() {
             whats::spawn(dir.clone());
             adb::spawn(app.handle().clone(), key);
             mouse::spawn(&config::get().mouse_lado);
+            watch::spawn();
             update::spawn(app.handle().clone());
 
             let open = MenuItem::with_id(app, "open", "Ajustes", true, None::<&str>)?;

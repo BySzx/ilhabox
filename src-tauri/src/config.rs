@@ -21,6 +21,13 @@ pub struct Atalho {
     pub cor: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Checklist {
+    pub nome: String,
+    pub itens: Vec<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Config {
@@ -38,6 +45,17 @@ pub struct Config {
     pub fim_turno: String,
     /// Side of the screens where the phone sits, for the mouse bridge: direita, esquerda, baixo, cima, desligado.
     pub mouse_lado: String,
+    /// Word that marks a Movidesk window title (ticket detection).
+    pub movidesk_palavra: String,
+    /// Remind after this many minutes with nothing being timed during the shift (0 = off).
+    pub lembrete_min: u32,
+    /// Ask "still on it?" after this many minutes in one period (0 = off).
+    pub lembrete_longo_min: u32,
+    /// Suggest timing WhatsApp after this many minutes with it in front (0 = off).
+    pub whats_min: u32,
+    /// Pause on Win+L and dim the phone.
+    pub pausar_ao_travar: bool,
+    pub checklists: Vec<Checklist>,
 }
 
 impl Default for Config {
@@ -65,6 +83,21 @@ impl Default for Config {
             inicio_turno: "08:00".into(),
             fim_turno: "18:00".into(),
             mouse_lado: "direita".into(),
+            movidesk_palavra: "movidesk".into(),
+            lembrete_min: 10,
+            lembrete_longo_min: 120,
+            whats_min: 2,
+            pausar_ao_travar: true,
+            checklists: vec![
+                Checklist {
+                    nome: "Erro de NF-e".into(),
+                    itens: ["Certificado digital válido", "Série e numeração", "Status da SEFAZ", "Dados do destinatário"].map(String::from).to_vec(),
+                },
+                Checklist {
+                    nome: "Sem acesso".into(),
+                    itens: ["Usuário ativo", "Senha resetada", "Permissões do perfil", "Testado com o cliente"].map(String::from).to_vec(),
+                },
+            ],
         }
     }
 }

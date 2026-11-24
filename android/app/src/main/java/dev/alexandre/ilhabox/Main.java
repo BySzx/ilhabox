@@ -165,6 +165,16 @@ public class Main extends Activity {
             else v.vibrate(d);
         }
 
+        /** Screen almost off while the PC is locked (saves battery and the panel); back on unlock. */
+        @JavascriptInterface
+        public void dim(boolean on) {
+            ui.post(() -> {
+                WindowManager.LayoutParams lp = getWindow().getAttributes();
+                lp.screenBrightness = on ? 0.01f : WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+                getWindow().setAttributes(lp);
+            });
+        }
+
         @JavascriptInterface
         @SuppressWarnings("deprecation")
         public String version() {

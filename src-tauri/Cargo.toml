@@ -1,6 +1,6 @@
 [package]
 name = "ilhabox"
-version = "0.1.6"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
@@ -38,7 +38,8 @@ windows = { version = "0.62", features = [
   "Win32_System_DataExchange",
   "Win32_System_Memory",
   "Win32_System_Ole",
-  "Win32_System_Time",
+  "Win32_System_StationsAndDesktops",
+  "Win32_System_SystemInformation",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_WindowsAndMessaging",
 ] }

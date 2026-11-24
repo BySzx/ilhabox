@@ -40,6 +40,11 @@ export function seed(f: Fire): void {
     modelo: "{inicio} às {fim} ({duracao}) · {atividade}\n{descricao}",
     tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"],
     metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
+    movideskPalavra: "movidesk", lembreteMin: 10, lembreteLongoMin: 120, whatsMin: 2, pausarAoTravar: true,
+    checklists: [
+      { nome: "Erro de NF-e", itens: ["Certificado digital válido", "Série e numeração", "Status da SEFAZ", "Dados do destinatário"] },
+      { nome: "Sem acesso", itens: ["Usuário ativo", "Senha resetada", "Permissões do perfil", "Testado com o cliente"] },
+    ],
   };
   const media: Media = {
     active: true, title: "Sorry", artist: "Madonna", album: "Confessions on a Dance Floor", playing: true,
@@ -58,6 +63,11 @@ export function seed(f: Fire): void {
   fire("phone", { status: "conectado", serial: "R58N", modelo: "SM A105M", easypac: "br.com.easypac.app", appVersao: 1, erro: "" });
   fire("update", { current: "0.1.0", version: null });
   setTimeout(() => fire("whats", { id: 4, at: Date.now(), chat: "Marina (Comercial)", text: "Consegue olhar agora?", avatar: null }), 2500);
+  if (new URLSearchParams(location.search).has("sugestao"))
+    setTimeout(() => fire("sugestao", {
+      id: "ticket-48230", text: "Ticket #48230 aberto no Movidesk", detail: "Erro ao emitir NF-e", at: Date.now(),
+      actions: [{ label: "Iniciar #48230", cmd: "work_start", args: { tipo: "Ticket", ticket: "48230", desc: "Erro ao emitir NF-e" } }, { label: "Agora não" }],
+    }), 300);
 }
 
 export function demoCmd(name: string, args: Record<string, unknown>): unknown {
@@ -70,7 +80,11 @@ export function demoCmd(name: string, args: Record<string, unknown>): unknown {
   if (name === "work_start") {
     pauseAll();
     entries.push({ id: entries.length + 1, tipo: String(args.tipo ?? "Ticket"), ticket: args.tipo === "Ticket" ? String(args.ticket ?? "") : "", desc: String(args.desc ?? ""), segs: [{ s: now, e: null }], done: false, sent: false, start: now, end: null });
-  } else if (name === "work_pause") pauseAll();
+  } else if (name === "work_add") {
+    const segs = args.segs as { s: number; e: number }[];
+    entries.push({ id: entries.length + 1, tipo: String(args.tipo ?? "Ticket"), ticket: String(args.ticket ?? ""), desc: String(args.desc ?? ""), segs, done: true, sent: false, start: segs[0].s, end: segs[segs.length - 1].e });
+  } else if (name === "sugestao_fechar") fire("sugestao", null);
+  else if (name === "work_pause") pauseAll();
   else if (name === "work_resume") {
     pauseAll();
     const e = entries.find((x) => x.id === args.id);
