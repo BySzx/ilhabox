@@ -54,6 +54,12 @@ if ($LASTEXITCODE -ne 0) {
   gh repo create $code --private --source . --remote origin --push --description 'IlhaBox: a Ilha do trabalho, num celular pelo USB'
 } else {
   if (-not (git remote)) { git remote add origin "https://github.com/$code.git" }
+  # The repo may already have history (first install made from elsewhere): put this folder on top of it.
+  git fetch origin main 2>$null
+  if ($LASTEXITCODE -eq 0) {
+    git reset --soft origin/main
+    git commit -m 'IlhaBox' 2>$null | Out-Null
+  }
   git push -u origin main
 }
 if ($LASTEXITCODE -ne 0) { Fail 'Push do código falhou.' }
