@@ -11,10 +11,10 @@ export type Media = {
   positionMs: number; durationMs: number; sampledAt: number; app: string;
 };
 export type WMsg = { id: number; at: number; chat: string; text: string; avatar: string | null };
-export type Entry = { id: number; ticket: string; desc: string; start: number; end: number | null; sent: boolean };
+export type Entry = { id: number; tipo: string; ticket: string; desc: string; start: number; end: number | null; sent: boolean };
 export type Atalho = { id: string; nome: string; tipo: "texto" | "site" | "programa" | "celular"; valor: string; colar: boolean; cor: string };
 export type Config = {
-  atalhos: Atalho[]; modelo: string; metaMin: number; abrirAoConectar: boolean;
+  atalhos: Atalho[]; modelo: string; tipos: string[]; metaMin: number; abrirAoConectar: boolean;
   easypacPacote: string; inicioTurno: string; fimTurno: string; mouseLado: string;
 };
 export type Phone = { status: string; serial: string; modelo: string; easypac: string; appVersao: number; erro: string };
@@ -66,7 +66,7 @@ export const onNewMessage = (fn: (m: WMsg) => void): void => void newListeners.a
 export const [entries, setEntries] = createSignal<Entry[]>([]);
 export const running = createMemo(() => entries().find((e) => e.end == null) ?? null);
 export const [config, setConfig] = createStore<Config>({
-  atalhos: [], modelo: "", metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
+  atalhos: [], modelo: "", tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"], metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
 });
 export const [phoneState, setPhoneState] = createSignal<Phone>({ status: "desconectado", serial: "", modelo: "", easypac: "", appVersao: 0, erro: "" });
 export const [update, setUpdate] = createSignal<Update>({ current: "", version: null });
@@ -134,11 +134,22 @@ export function entriesOf(day: number): Entry[] {
   return entries().filter((e) => startOfDay(e.start) === day);
 }
 
+/** Old entries have no kind: they were all tickets. */
+export const kind = (e: Pick<Entry, "tipo">): string => e.tipo || "Ticket";
+export const isTicket = (e: Pick<Entry, "tipo">): boolean => kind(e) === "Ticket";
+/** "Ticket 48230", "Ticket" (no number yet) or the kind itself ("Reunião"). */
+export const activity = (e: Entry): string => (isTicket(e) ? `Ticket${e.ticket ? ` ${e.ticket}` : ""}` : kind(e));
+/** Short label for pills and lists: "#48230" or "Reunião". */
+export const tag = (e: Entry): string => (isTicket(e) ? `#${e.ticket || "—"}` : kind(e));
+
 /** Movidesk text of one entry from the template in the settings. */
 export function entryText(e: Entry): string {
   const end = e.end ?? Date.now();
-  return (config.modelo || "{inicio} às {fim} ({duracao}) · Ticket {ticket}\n{descricao}")
-    .split("{ticket}").join(e.ticket || "—")
+  const model = (config.modelo || "{inicio} às {fim} ({duracao}) · {atividade}\n{descricao}").split("Ticket {ticket}").join("{atividade}");
+  return model
+    .split("{atividade}").join(activity(e))
+    .split("{tipo}").join(kind(e))
+    .split("{ticket}").join(e.ticket || "")
     .split("{descricao}").join(e.desc || "")
     .split("{inicio}").join(hhmm(e.start))
     .split("{fim}").join(hhmm(end))
@@ -148,9 +159,17 @@ export function entryText(e: Entry): string {
     .trim();
 }
 
+/** Time per kind of activity, biggest first. */
+export function byKind(list: Entry[], at = Date.now()): [string, number][] {
+  const m = new Map<string, number>();
+  for (const e of list) m.set(kind(e), (m.get(kind(e)) ?? 0) + length(e, at));
+  return [...m.entries()].sort((a, b) => b[1] - a[1]);
+}
+
 export function dayText(day: number): string {
   const list = entriesOf(day);
   const total = list.reduce((s, e) => s + length(e, Date.now()), 0);
-  const lines = list.map((e) => `• ${hhmm(e.start)}–${hhmm(e.end ?? Date.now())} (${dur(length(e, Date.now()))}) Ticket ${e.ticket || "—"}${e.desc ? ` — ${e.desc}` : ""}`);
-  return [`Resumo de ${ddmmyyyy(day)}`, ...lines, `Total: ${dur(total)}`].join("\n");
+  const lines = list.map((e) => `• ${hhmm(e.start)}–${hhmm(e.end ?? Date.now())} (${dur(length(e, Date.now()))}) ${activity(e)}${e.desc ? ` — ${e.desc}` : ""}`);
+  const kinds = byKind(list).map(([k, ms]) => `${k} ${dur(ms)}`).join(" · ");
+  return [`Resumo de ${ddmmyyyy(day)}`, ...lines, `Total: ${dur(total)}${kinds ? ` (${kinds})` : ""}`].join("\n");
 }

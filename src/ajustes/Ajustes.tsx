@@ -64,7 +64,7 @@ export function Ajustes(): JSX.Element {
       }),
     );
   const preview = () =>
-    entryText({ id: 0, ticket: "48230", desc: "Erro ao emitir NF-e, certificado vencido", start: Date.now() - 67 * 60000, end: Date.now(), sent: false });
+    entryText({ id: 0, tipo: "Ticket", ticket: "48230", desc: "Erro ao emitir NF-e, certificado vencido", start: Date.now() - 67 * 60000, end: Date.now(), sent: false });
 
   return (
     <div class="wrap">
@@ -137,10 +137,22 @@ export function Ajustes(): JSX.Element {
             <textarea rows={3} class="mono" value={draft.modelo} onInput={(e) => edit(() => setDraft("modelo", e.currentTarget.value))} />
           </label>
           <span class="hint">
-            Campos: <code>{"{ticket}"}</code> <code>{"{descricao}"}</code> <code>{"{inicio}"}</code> <code>{"{fim}"}</code> <code>{"{duracao}"}</code> (1h07){" "}
+            Campos: <code>{"{atividade}"}</code> (Ticket 48230 ou Reunião) <code>{"{tipo}"}</code> <code>{"{ticket}"}</code> <code>{"{descricao}"}</code> <code>{"{inicio}"}</code> <code>{"{fim}"}</code> <code>{"{duracao}"}</code> (1h07){" "}
             <code>{"{horas}"}</code> (01:07) <code>{"{data}"}</code>
           </span>
           <pre class="preview">{preview()}</pre>
+          <label class="field">
+            Tipos de atividade (separados por vírgula; "Ticket" é o que pede número)
+            <input
+              value={draft.tipos.join(", ")}
+              onChange={(e) =>
+                edit(() => {
+                  const l = e.currentTarget.value.split(",").map((x) => x.trim()).filter(Boolean);
+                  setDraft("tipos", l.includes("Ticket") ? l : ["Ticket", ...l]);
+                })
+              }
+            />
+          </label>
           <div class="row">
             <label class="field small">
               Meta do dia (horas)

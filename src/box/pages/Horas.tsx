@@ -2,12 +2,13 @@ import { Check, ChevronLeft, ChevronRight, ClipboardCopy, Pencil, Play, RotateCc
 import { createMemo, createSignal, For, Show, type JSX } from "solid-js";
 import { cmd } from "../../lib/api";
 import {
-  clock, config, DAY, dayText, dur, entriesOf, entryText, hhmm, length, now, running, startOfDay, type Entry,
+  byKind, clock, config, DAY, dayText, dur, entriesOf, entryText, hhmm, isTicket, kind, length, now, running, startOfDay, tag, type Entry,
 } from "../../lib/state";
 import { feedback, note } from "../ui";
 
 const [day, setDay] = createSignal(startOfDay(Date.now()));
 const [editing, setEditing] = createSignal<Entry | null>(null);
+const [tipo, setTipo] = createSignal("Ticket");
 
 async function copyEntry(e: Entry): Promise<void> {
   await cmd("copiar", { texto: entryText(e) });
@@ -29,12 +30,12 @@ export function Horas(): JSX.Element {
   const label = () =>
     isToday() ? "Hoje" : day() === startOfDay(now()) - DAY ? "Ontem" : new Date(day()).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
 
-  const start = (ticket = ticketEl.value, desc = descEl.value) => {
-    void cmd("work_start", { ticket: ticket.replace(/^#/, "").trim(), desc: desc.trim() })
+  const start = (t = tipo(), ticket = ticketEl?.value ?? "", desc = descEl.value) => {
+    void cmd("work_start", { tipo: t, ticket: ticket.replace(/^#/, "").trim(), desc: desc.trim() })
       .then(() => {
-        ticketEl.value = "";
+        if (ticketEl) ticketEl.value = "";
         descEl.value = "";
-        ticketEl.blur();
+        ticketEl?.blur();
         descEl.blur();
         setDay(startOfDay(Date.now()));
       })
@@ -55,8 +56,19 @@ export function Horas(): JSX.Element {
               }}
             >
               <span class="label">Novo apontamento</span>
-              <input ref={ticketEl} class="big-input mono" placeholder="Nº do ticket" inputmode="numeric" enterkeyhint="next" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), descEl.focus())} />
-              <input ref={descEl} class="big-input" placeholder="O que está fazendo (opcional)" enterkeyhint="go" />
+              <div class="seg kinds">
+                <For each={config.tipos}>
+                  {(t) => (
+                    <button type="button" classList={{ on: tipo() === t }} onClick={() => setTipo(t)}>
+                      {t}
+                    </button>
+                  )}
+                </For>
+              </div>
+              <Show when={tipo() === "Ticket"}>
+                <input ref={ticketEl} class="big-input mono" placeholder="Nº do ticket" inputmode="numeric" enterkeyhint="next" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), descEl.focus())} />
+              </Show>
+              <input ref={descEl} class="big-input" placeholder={tipo() === "Ticket" ? "O que está fazendo (opcional)" : `${tipo()}: sobre o quê? (opcional)`} enterkeyhint="go" />
               <button class="btn green wide" type="submit">
                 <Play size={18} /> Iniciar
               </button>
@@ -66,7 +78,7 @@ export function Horas(): JSX.Element {
           {(r) => (
             <div class="live-box">
               <span class="label">Em andamento desde {hhmm(r().start)}</span>
-              <div class="ticket mono">#{r().ticket || "—"}</div>
+              <div class="ticket" classList={{ mono: isTicket(r()) }}>{tag(r())}</div>
               <div class="desc">{r().desc || "Sem descrição"}</div>
               <div class="watch mono">{clock(length(r(), now()))}</div>
               <div class="row">
@@ -93,6 +105,9 @@ export function Horas(): JSX.Element {
               {dur(total())}
               <Show when={isToday()}> / {dur(config.metaMin * 60000)}</Show>
             </span>
+            <Show when={byKind(list(), now()).length > 1}>
+              <span class="kinds-sum dim">{byKind(list(), now()).map(([k, ms]) => `${k} ${dur(ms)}`).join(" · ")}</span>
+            </Show>
           </div>
           <button class="icon" disabled={isToday()} onClick={() => setDay((d) => Math.min(startOfDay(Date.now()), d + DAY))} aria-label="Próximo dia">
             <ChevronRight size={20} />
@@ -111,7 +126,7 @@ export function Horas(): JSX.Element {
                 </div>
                 <div class="e-body" onClick={() => setEditing(e)}>
                   <div class="e-top">
-                    <b class="mono">#{e.ticket || "—"}</b>
+                    <b classList={{ mono: isTicket(e), kind: !isTicket(e) }}>{tag(e)}</b>
                     <span class="mono dim">{dur(length(e, now()))}</span>
                     <Show when={e.sent}>
                       <span class="sent-tag"><Check size={12} /> lançado</span>
@@ -124,7 +139,7 @@ export function Horas(): JSX.Element {
                     <ClipboardCopy size={18} />
                   </button>
                   <Show when={e.end != null}>
-                    <button class="icon" onClick={() => start(e.ticket, e.desc)} aria-label="Continuar este ticket">
+                    <button class="icon" onClick={() => start(kind(e), e.ticket, e.desc)} aria-label="Continuar">
                       <RotateCcw size={18} />
                     </button>
                   </Show>
@@ -150,10 +165,11 @@ function atTime(base: number, v: string): number {
 
 function EditSheet(p: { entry: Entry; close: () => void }): JSX.Element {
   const e = p.entry;
-  let ticket!: HTMLInputElement, desc!: HTMLTextAreaElement, ini!: HTMLInputElement, fim!: HTMLInputElement, sent!: HTMLInputElement;
+  let ticket: HTMLInputElement | undefined, desc!: HTMLTextAreaElement, ini!: HTMLInputElement, fim!: HTMLInputElement, sent!: HTMLInputElement;
+  const [t, setT] = createSignal(kind(e));
   const toTime = (t: number) => hhmm(t);
   const save = () => {
-    const args: Record<string, unknown> = { id: e.id, ticket: ticket.value.replace(/^#/, ""), desc: desc.value, start: atTime(e.start, ini.value), sent: sent.checked };
+    const args: Record<string, unknown> = { id: e.id, tipo: t(), ticket: (ticket?.value ?? "").replace(/^#/, ""), desc: desc.value, start: atTime(e.start, ini.value), sent: sent.checked };
     if (e.end != null) args.end = atTime(e.start, fim.value);
     void cmd("work_update", args).then(p.close, feedback);
   };
@@ -167,10 +183,19 @@ function EditSheet(p: { entry: Entry; close: () => void }): JSX.Element {
             <X size={20} />
           </button>
         </div>
+        <div class="seg kinds">
+          <For each={config.tipos}>
+            {(k) => (
+              <button type="button" classList={{ on: t() === k }} onClick={() => setT(k)}>
+                {k}
+              </button>
+            )}
+          </For>
+        </div>
         <div class="sheet-grid">
-          <label>
+          <label classList={{ off: t() !== "Ticket" }}>
             Ticket
-            <input ref={ticket} class="mono" value={e.ticket} inputmode="numeric" />
+            <input ref={ticket} class="mono" value={e.ticket} inputmode="numeric" disabled={t() !== "Ticket"} />
           </label>
           <label>
             Início

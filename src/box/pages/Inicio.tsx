@@ -1,7 +1,7 @@
 import { Pause, Play, Plus, SkipForward, Square } from "lucide-solid";
 import { createMemo, For, Show, type JSX } from "solid-js";
 import { cmd } from "../../lib/api";
-import { art, clock, config, control, dur, entriesOf, length, media, msgs, now, running, startOfDay } from "../../lib/state";
+import { art, clock, config, control, dur, entriesOf, isTicket, length, media, msgs, now, running, startOfDay, tag } from "../../lib/state";
 import { go } from "../App";
 import { feedback } from "../ui";
 import { ago, initials, tint } from "../whatsUi";
@@ -46,7 +46,7 @@ export function Inicio(): JSX.Element {
             <>
               <span class="label">Em andamento</span>
               <div class="t-head">
-                <span class="ticket mono">#{r().ticket || "—"}</span>
+                <span class="ticket" classList={{ mono: isTicket(r()) }}>{tag(r())}</span>
                 <span class="desc">{r().desc || "Sem descrição"}</span>
               </div>
               <div class="watch mono">{clock(length(r(), now()))}</div>

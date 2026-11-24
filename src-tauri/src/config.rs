@@ -25,8 +25,10 @@ pub struct Atalho {
 #[serde(rename_all = "camelCase", default)]
 pub struct Config {
     pub atalhos: Vec<Atalho>,
-    /// Movidesk entry text. Fields: {ticket} {descricao} {inicio} {fim} {duracao} {data}.
+    /// Movidesk entry text. Fields: {atividade} {tipo} {ticket} {descricao} {inicio} {fim} {duracao} {horas} {data}.
     pub modelo: String,
+    /// Kinds of activity offered when starting a time entry; "Ticket" is the one with a number.
+    pub tipos: Vec<String>,
     pub meta_min: u32,
     /// Bring the IlhaBox app to the front when the phone is plugged in.
     pub abrir_ao_conectar: bool,
@@ -55,7 +57,8 @@ impl Default for Config {
                 at("print", "Pedir print", "texto", "Consegue me enviar um print da tela com a mensagem que aparece?", "#f59e0b"),
                 at("encerrar", "Encerramento", "texto", "Ficou alguma dúvida? Se precisar de algo mais, é só chamar. Tenha um ótimo dia!", "#a78bfa"),
             ],
-            modelo: "{inicio} às {fim} ({duracao}) · Ticket {ticket}\n{descricao}".into(),
+            modelo: "{inicio} às {fim} ({duracao}) · {atividade}\n{descricao}".into(),
+            tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"].map(String::from).to_vec(),
             meta_min: 8 * 60,
             abrir_ao_conectar: true,
             easypac_pacote: String::new(),

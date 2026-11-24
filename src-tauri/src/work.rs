@@ -17,6 +17,8 @@ const DAY_MS: i64 = 86_400_000;
 #[serde(rename_all = "camelCase", default)]
 pub struct Entry {
     pub id: u64,
+    /// Kind of activity: "Ticket", "WhatsApp", "Reunião", "Curso"… (empty in old entries = Ticket).
+    pub tipo: String,
     pub ticket: String,
     pub desc: String,
     pub start: i64,
@@ -86,12 +88,13 @@ fn n(args: &Value, k: &str) -> Option<i64> {
 
 /// Starts a stopwatch; whatever was running stops at the same instant (one thing at a time).
 pub fn start(args: &Value) -> Result<Value, String> {
-    let ticket = s(args, "ticket").unwrap_or_default();
+    let tipo = s(args, "tipo").filter(|t| !t.is_empty()).unwrap_or_else(|| "Ticket".into());
+    let ticket = if tipo == "Ticket" { s(args, "ticket").unwrap_or_default() } else { String::new() };
     let desc = s(args, "desc").unwrap_or_default();
     with(|b| {
         let at = now_ms();
         stop_running(b, at);
-        let e = Entry { id: next_id(b), ticket, desc, start: at, end: None, sent: false };
+        let e = Entry { id: next_id(b), tipo, ticket, desc, start: at, end: None, sent: false };
         b.entries.push(e.clone());
         Ok(serde_json::to_value(e).unwrap_or_default())
     })
@@ -111,8 +114,14 @@ pub fn update(args: &Value) -> Result<Value, String> {
     let id = args.get("id").and_then(Value::as_u64).ok_or("sem id")?;
     with(|b| {
         let e = b.entries.iter_mut().find(|e| e.id == id).ok_or("apontamento não existe")?;
+        if let Some(v) = s(args, "tipo").filter(|t| !t.is_empty()) {
+            e.tipo = v;
+        }
         if let Some(v) = s(args, "ticket") {
             e.ticket = v;
+        }
+        if !e.tipo.is_empty() && e.tipo != "Ticket" {
+            e.ticket.clear();
         }
         if let Some(v) = s(args, "desc") {
             e.desc = v;

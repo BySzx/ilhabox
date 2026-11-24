@@ -2,7 +2,7 @@ import { Clock3, House, LayoutGrid, MessageCircle, Music, Download } from "lucid
 import { createSignal, For, onMount, Show, type JSX } from "solid-js";
 import { cmd, online, phone } from "../lib/api";
 import { rgba } from "../lib/color";
-import { artColor, clock, length, now, onNewMessage, running, toast, update } from "../lib/state";
+import { artColor, clock, length, now, onNewMessage, running, tag, toast, update } from "../lib/state";
 import { Atalhos } from "./pages/Atalhos";
 import { Horas } from "./pages/Horas";
 import { Inicio } from "./pages/Inicio";
@@ -49,7 +49,7 @@ export function App(): JSX.Element {
             <button class="pill" onClick={() => go("horas")}>
               <span class="rec" />
               <span class="mono">{clock(length(r(), now()))}</span>
-              <span class="dim">#{r().ticket || "sem ticket"}</span>
+              <span class="dim">{tag(r())}</span>
             </button>
           )}
         </Show>

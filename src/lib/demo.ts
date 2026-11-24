@@ -21,10 +21,10 @@ export function seed(f: Fire): void {
   (window as unknown as { __fire: Fire }).__fire = f;
   const now = Date.now();
   entries = [
-    { id: 1, ticket: "48211", desc: "Cliente sem acesso ao módulo financeiro, senha resetada", start: at(8, 4), end: at(8, 41), sent: true },
-    { id: 2, ticket: "48230", desc: "Erro ao emitir NF-e, certificado vencido", start: at(8, 45), end: at(9, 52), sent: false },
-    { id: 3, ticket: "48236", desc: "Dúvida sobre relatório de estoque", start: at(9, 58), end: at(10, 20), sent: false },
-    { id: 4, ticket: "48241", desc: "Integração travando na sincronização", start: now - 23 * 60000 - 17000, end: null, sent: false },
+    { id: 1, tipo: "Ticket", ticket: "48211", desc: "Cliente sem acesso ao módulo financeiro, senha resetada", start: at(8, 4), end: at(8, 41), sent: true },
+    { id: 2, tipo: "Ticket", ticket: "48230", desc: "Erro ao emitir NF-e, certificado vencido", start: at(8, 45), end: at(9, 52), sent: false },
+    { id: 3, tipo: "Reunião", ticket: "", desc: "Alinhamento semanal do suporte", start: at(9, 58), end: at(10, 20), sent: false },
+    { id: 4, tipo: "Ticket", ticket: "48241", desc: "Integração travando na sincronização", start: now - 23 * 60000 - 17000, end: null, sent: false },
   ];
   config = {
     atalhos: [
@@ -34,7 +34,8 @@ export function seed(f: Fire): void {
       { id: "encerrar", nome: "Encerramento", tipo: "texto", valor: "Ficou alguma dúvida?", colar: true, cor: "#a78bfa" },
       { id: "acesso", nome: "Acesso remoto", tipo: "programa", valor: "C:\\anydesk.exe", colar: false, cor: "#f472b6" },
     ],
-    modelo: "{inicio} às {fim} ({duracao}) · Ticket {ticket}\n{descricao}",
+    modelo: "{inicio} às {fim} ({duracao}) · {atividade}\n{descricao}",
+    tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"],
     metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
   };
   const media: Media = {
@@ -60,7 +61,7 @@ export function demoCmd(name: string, args: Record<string, unknown>): unknown {
   const now = Date.now();
   if (name === "work_start") {
     entries = entries.map((e) => (e.end == null ? { ...e, end: now } : e));
-    entries.push({ id: entries.length + 1, ticket: String(args.ticket ?? ""), desc: String(args.desc ?? ""), start: now, end: null, sent: false });
+    entries.push({ id: entries.length + 1, tipo: String(args.tipo ?? "Ticket"), ticket: args.tipo === "Ticket" ? String(args.ticket ?? "") : "", desc: String(args.desc ?? ""), start: now, end: null, sent: false });
   } else if (name === "work_stop") entries = entries.map((e) => (e.end == null ? { ...e, end: now } : e));
   else if (name === "work_delete") entries = entries.filter((e) => e.id !== args.id);
   else if (name === "work_update") entries = entries.map((e) => (e.id === args.id ? { ...e, ...args } as Entry : e));
