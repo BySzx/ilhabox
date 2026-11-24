@@ -20,6 +20,8 @@ const DAY_MS: i64 = 86_400_000;
 pub struct Seg {
     pub s: i64,
     pub e: Option<i64>,
+    /// Posted in Movidesk (each period is its own Movidesk entry).
+    pub sent: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -35,7 +37,7 @@ pub struct Entry {
     pub check: Vec<String>,
     /// Concluded: no longer paused, counts as "to post in Movidesk".
     pub done: bool,
-    /// Marked once it was pasted into Movidesk.
+    /// Every period posted in Movidesk (derived from the periods).
     pub sent: bool,
     /// First start and, once concluded, last end (kept for the phone and for old files).
     pub start: i64,
@@ -53,11 +55,16 @@ impl Entry {
         }
     }
 
-    /// Old files had one start/end per entry and no periods.
+    /// Old files had one start/end per entry and no periods, then one "sent" per entry.
     fn migrate(&mut self) {
         if self.segs.is_empty() {
-            self.segs.push(Seg { s: self.start, e: self.end });
+            self.segs.push(Seg { s: self.start, e: self.end, sent: self.sent });
             self.done = self.end.is_some();
+        }
+        if self.sent && self.segs.iter().all(|g| !g.sent) {
+            for g in &mut self.segs {
+                g.sent = true;
+            }
         }
     }
 
@@ -65,6 +72,7 @@ impl Entry {
         self.segs.sort_by_key(|s| s.s);
         self.start = self.segs.first().map(|s| s.s).unwrap_or(self.start);
         self.end = if self.done { self.segs.last().and_then(|s| s.e) } else { None };
+        self.sent = !self.segs.is_empty() && self.segs.iter().all(|g| g.sent);
     }
 }
 
@@ -172,7 +180,7 @@ pub fn start(args: &Value) -> Result<Value, String> {
     with(|b| {
         let at = now_ms();
         pause_all(b, at);
-        let e = Entry { id: next_id(b), tipo, ticket, desc, segs: vec![Seg { s: at, e: None }], start: at, ..Default::default() };
+        let e = Entry { id: next_id(b), tipo, ticket, desc, segs: vec![Seg { s: at, e: None, sent: false }], start: at, ..Default::default() };
         b.entries.push(e.clone());
         Ok(serde_json::to_value(e).unwrap_or_default())
     })
@@ -195,9 +203,8 @@ pub fn resume(args: &Value) -> Result<Value, String> {
         let at = now_ms();
         pause_all(b, at);
         let e = &mut b.entries[i];
-        e.segs.push(Seg { s: at, e: None });
+        e.segs.push(Seg { s: at, e: None, sent: false });
         e.done = false;
-        e.sent = false;
         Ok(Value::Null)
     })
 }
@@ -234,9 +241,6 @@ pub fn update(args: &Value) -> Result<Value, String> {
         if let Some(v) = s(args, "desc") {
             e.desc = v;
         }
-        if let Some(v) = args.get("sent").and_then(Value::as_bool) {
-            e.sent = v;
-        }
         if let Some(v) = args.get("check").and_then(Value::as_array) {
             e.check = v.iter().filter_map(Value::as_str).map(str::to_string).collect();
         }
@@ -263,6 +267,11 @@ pub fn update(args: &Value) -> Result<Value, String> {
                 e.done = false;
             }
         }
+        if let Some(v) = args.get("sent").and_then(Value::as_bool) {
+            for g in &mut e.segs {
+                g.sent = v && g.e.is_some();
+            }
+        }
         Ok(Value::Null)
     })
 }
@@ -275,13 +284,63 @@ pub fn remove(args: &Value) -> Result<Value, String> {
     })
 }
 
-/// Marks several entries as already pasted into Movidesk.
+/// Marks periods as posted in Movidesk: whole entries ("ids") or single periods
+/// ("periods": [{ "id", "s" }], the period identified by its start).
 pub fn mark_sent(args: &Value) -> Result<Value, String> {
     let ids: Vec<u64> = args.get("ids").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_u64).collect()).unwrap_or_default();
+    let periods: Vec<(u64, i64)> = args
+        .get("periods")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(|p| Some((p.get("id")?.as_u64()?, p.get("s")?.as_i64()?))).collect())
+        .unwrap_or_default();
     with(|b| {
-        for e in b.entries.iter_mut().filter(|e| ids.contains(&e.id)) {
-            e.sent = true;
+        for e in &mut b.entries {
+            let all = ids.contains(&e.id);
+            for g in e.segs.iter_mut().filter(|g| g.e.is_some()) {
+                if all || periods.contains(&(e.id, g.s)) {
+                    g.sent = true;
+                }
+            }
         }
         Ok(Value::Null)
     })
+}
+
+/// Undoes an automatic pause: the last period of the entry is open again (it never stopped).
+pub fn reopen(args: &Value) -> Result<Value, String> {
+    with(|b| {
+        let i = entry(b, args)?;
+        let at = now_ms();
+        pause_all(b, at);
+        let e = &mut b.entries[i];
+        if let Some(g) = e.segs.last_mut() {
+            g.e = None;
+            g.sent = false;
+        }
+        e.done = false;
+        Ok(Value::Null)
+    })
+}
+
+/// Closes what is running at a given time (end of the shift, last moment the PC was in use).
+/// Returns the entry and where it was cut.
+pub fn cut_running(at: i64) -> Option<(Entry, i64)> {
+    with(|b| {
+        let e = b.entries.iter_mut().find(|e| e.running()).ok_or("nada rodando")?;
+        e.close(at);
+        let cut = e.segs.last().and_then(|g| g.e).unwrap_or(at);
+        Ok((e.clone(), cut))
+    })
+    .ok()
+}
+
+/// Periods already closed and not posted in Movidesk on days before `before` (last week).
+pub fn unsent_before(before: i64) -> usize {
+    let since = before - 7 * DAY_MS;
+    snapshot()
+        .iter()
+        .filter(|e| e.tipo != "Almoço")
+        .flat_map(|e| e.segs.iter())
+        .filter(|g| g.e.is_some() && !g.sent && g.s < before && g.s >= since)
+        .count()
 }

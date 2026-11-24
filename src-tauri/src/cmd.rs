@@ -52,6 +52,7 @@ pub fn run(app: &AppHandle, name: &str, args: Value) -> Result<Value, String> {
         "work_resume" => work::resume(&args),
         "work_update" => work::update(&args),
         "work_add" => work::add(&args),
+        "work_reopen" => work::reopen(&args),
         "janela_atual" => {
             let (title, url) = crate::watch::foreground();
             let ticket = url

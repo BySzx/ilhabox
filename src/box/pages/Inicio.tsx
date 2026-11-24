@@ -26,7 +26,7 @@ export function Inicio(): JSX.Element {
           </div>
           <div class="meter"><i style={{ width: `${Math.min(100, (total() / goal()) * 100)}%` }} /></div>
           <Show when={pending()}>
-            <button class="link" onClick={() => go("horas")}>{pending()} {pending() === 1 ? "apontamento" : "apontamentos"} para lançar no Movidesk</button>
+            <button class="link" onClick={() => go("horas")}>{pending()} {pending() === 1 ? "período" : "períodos"} para lançar no Movidesk</button>
           </Show>
         </div>
       </div>

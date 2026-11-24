@@ -74,6 +74,7 @@ fn autostart(app: AppHandle, on: Option<bool>) -> bool {
 #[tauri::command]
 fn quit(app: AppHandle) {
     mouse::show_cursor();
+    let _ = work::pause_running();
     app.exit(0);
 }
 
@@ -108,7 +109,7 @@ pub fn run() {
             whats::spawn(dir.clone());
             adb::spawn(app.handle().clone(), key);
             mouse::spawn(&config::get().mouse_lado);
-            watch::spawn();
+            watch::spawn(dir.clone());
             update::spawn(app.handle().clone());
 
             let open = MenuItem::with_id(app, "open", "Ajustes", true, None::<&str>)?;
@@ -126,6 +127,7 @@ pub fn run() {
                     }
                     "quit" => {
                         mouse::show_cursor();
+                        let _ = work::pause_running();
                         app.exit(0)
                     }
                     _ => {}

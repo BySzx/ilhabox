@@ -21,7 +21,7 @@ export function seed(f: Fire): void {
   (window as unknown as { __fire: Fire }).__fire = f;
   const now = Date.now();
   const mk = (id: number, tipo: string, ticket: string, desc: string, segs: [number, number | null][], done: boolean, sent = false): Entry => ({
-    id, tipo, ticket, desc, segs: segs.map(([s, e]) => ({ s, e })), done, sent, start: segs[0][0], end: done ? segs[segs.length - 1][1] : null,
+    id, tipo, ticket, desc, segs: segs.map(([s, e]) => ({ s, e, sent })), done, sent, start: segs[0][0], end: done ? segs[segs.length - 1][1] : null,
   });
   entries = [
     mk(1, "Ticket", "48211", "Cliente sem acesso ao módulo financeiro, senha resetada", [[at(8, 4), at(8, 41)]], true, true),
@@ -76,7 +76,7 @@ export function demoCmd(name: string, args: Record<string, unknown>): unknown {
     const l = e.segs[e.segs.length - 1];
     if (l && l.e == null) l.e = now;
   });
-  const refresh = (e: Entry) => ({ ...e, segs: e.segs.map((g) => ({ ...g })), start: e.segs[0].s, end: e.done ? e.segs[e.segs.length - 1].e : null });
+  const refresh = (e: Entry) => ({ ...e, segs: e.segs.map((g) => ({ ...g })), start: e.segs[0].s, end: e.done ? e.segs[e.segs.length - 1].e : null, sent: e.segs.every((g) => g.sent) });
   if (name === "work_start") {
     pauseAll();
     entries.push({ id: entries.length + 1, tipo: String(args.tipo ?? "Ticket"), ticket: args.tipo === "Ticket" ? String(args.ticket ?? "") : "", desc: String(args.desc ?? ""), segs: [{ s: now, e: null }], done: false, sent: false, start: now, end: null });
@@ -101,7 +101,13 @@ export function demoCmd(name: string, args: Record<string, unknown>): unknown {
     }
   } else if (name === "work_delete") entries = entries.filter((e) => e.id !== args.id);
   else if (name === "work_update") entries = entries.map((e) => (e.id === args.id ? ({ ...e, ...args } as Entry) : e));
-  else if (name === "work_sent") entries = entries.map((e) => ((args.ids as number[]).includes(e.id) ? { ...e, sent: true } : e));
+  else if (name === "work_sent") {
+    const ps = (args.periods as { id: number; s: number }[]) ?? [];
+    entries = entries.map((e) => ({ ...e, segs: e.segs.map((g) => (ps.some((p) => p.id === e.id && p.s === g.s) || ((args.ids as number[]) ?? []).includes(e.id) ? { ...g, sent: true } : g)) }));
+  } else if (name === "work_reopen") {
+    const e = entries.find((x) => x.id === args.id);
+    if (e) e.segs[e.segs.length - 1].e = null;
+  }
   else if (name === "config_set") {
     config = args as unknown as Config;
     fire("config", config);

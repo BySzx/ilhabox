@@ -7,23 +7,99 @@ use crate::{bus, config, diag, work};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 use windows::Win32::System::StationsAndDesktops::{CloseDesktop, OpenInputDesktop, DESKTOP_ACCESS_FLAGS, DESKTOP_CONTROL_FLAGS};
 use windows::Win32::System::SystemInformation::GetLocalTime;
-use windows::Win32::Foundation::HWND;
+use windows::core::w;
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::RemoteDesktop::{WTSRegisterSessionNotification, NOTIFY_FOR_THIS_SESSION};
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationValuePattern, TreeScope_Descendants, UIA_ControlTypePropertyId, UIA_DocumentControlTypeId,
     UIA_EditControlTypeId, UIA_NamePropertyId, UIA_TextControlTypeId, UIA_ValuePatternId,
 };
-use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowTextW, RegisterClassW, TranslateMessage, MSG,
+    WINDOW_EX_STYLE, WNDCLASSW, WS_POPUP,
+};
 
 const DESKTOP_SWITCHDESKTOP: u32 = 0x0100;
-static DISMISSED: Mutex<Option<HashMap<String, Instant>>> = Mutex::new(None);
+const WM_QUERYENDSESSION: u32 = 0x0011;
+const WM_POWERBROADCAST: u32 = 0x0218;
+const WM_WTSSESSION_CHANGE: u32 = 0x02B1;
+const WTS_SESSION_LOCK: usize = 7;
+const WTS_SESSION_UNLOCK: usize = 8;
+const PBT_APMSUSPEND: usize = 4;
+const PBT_APMRESUMESUSPEND: usize = 7;
+const PBT_APMRESUMEAUTOMATIC: usize = 0x12;
+
+/// Lock state from Windows' own session events (Win+L, lock screen after sleep).
+static LOCKED: AtomicBool = AtomicBool::new(false);
+static EVENTS: AtomicBool = AtomicBool::new(false);
+
+unsafe extern "system" fn session_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    match msg {
+        WM_WTSSESSION_CHANGE => {
+            match wp.0 {
+                WTS_SESSION_LOCK => LOCKED.store(true, Ordering::SeqCst),
+                WTS_SESSION_UNLOCK => LOCKED.store(false, Ordering::SeqCst),
+                _ => {}
+            }
+            LRESULT(0)
+        }
+        // Windows is shutting down or logging off: nothing keeps counting overnight.
+        WM_QUERYENDSESSION => {
+            let paused = work::pause_running();
+            diag::log(&format!("windows desligando; pausado={paused:?}"));
+            LRESULT(1)
+        }
+        WM_POWERBROADCAST => {
+            match wp.0 {
+                PBT_APMSUSPEND => LOCKED.store(true, Ordering::SeqCst),
+                // Waking up without a password shows no lock screen, so no unlock event: ask the desktop.
+                PBT_APMRESUMESUSPEND | PBT_APMRESUMEAUTOMATIC => LOCKED.store(locked_poll(), Ordering::SeqCst),
+                _ => {}
+            }
+            LRESULT(1)
+        }
+        _ => DefWindowProcW(hwnd, msg, wp, lp),
+    }
+}
+
+/// Hidden window that receives lock/unlock, sleep and shutdown from Windows.
+fn session_events() {
+    thread::spawn(|| unsafe {
+        let Ok(inst) = GetModuleHandleW(None) else { return };
+        let class = w!("IlhaBoxSessao");
+        let wc = WNDCLASSW { lpfnWndProc: Some(session_proc), hInstance: inst.into(), lpszClassName: class, ..Default::default() };
+        RegisterClassW(&wc);
+        let Ok(hwnd) = CreateWindowExW(WINDOW_EX_STYLE(0), class, w!("IlhaBox"), WS_POPUP, 0, 0, 0, 0, None, None, Some(inst.into()), None) else {
+            diag::log("sessao: janela oculta nao criada");
+            return;
+        };
+        match WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION) {
+            Ok(()) => EVENTS.store(true, Ordering::SeqCst),
+            Err(e) => diag::log(&format!("sessao: sem avisos de bloqueio ({})", e.message())),
+        }
+        let mut msg = MSG::default();
+        while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+            let _ = TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    });
+}
 
 fn locked() -> bool {
+    if EVENTS.load(Ordering::SeqCst) { LOCKED.load(Ordering::SeqCst) } else { locked_poll() }
+}
+static DISMISSED: Mutex<Option<HashMap<String, Instant>>> = Mutex::new(None);
+
+fn locked_poll() -> bool {
     unsafe {
         match OpenInputDesktop(DESKTOP_CONTROL_FLAGS(0), false, DESKTOP_ACCESS_FLAGS(DESKTOP_SWITCHDESKTOP)) {
             Ok(d) => {
@@ -114,10 +190,17 @@ pub fn foreground_title() -> String {
     }
 }
 
-/// (minutes since midnight, weekday 0 = Sunday)
-fn local_clock() -> (u32, u16) {
+/// (minutes since midnight, weekday 0 = Sunday, day of the month)
+fn local_clock() -> (u32, u16, u16) {
     let t = unsafe { GetLocalTime() };
-    (t.wHour as u32 * 60 + t.wMinute as u32, t.wDayOfWeek)
+    (t.wHour as u32 * 60 + t.wMinute as u32, t.wDayOfWeek, t.wDay)
+}
+
+/// Epoch ms of today at `minutes` past local midnight.
+fn today_at(minutes: u32) -> i64 {
+    let t = unsafe { GetLocalTime() };
+    let since_midnight = (t.wHour as i64 * 3600 + t.wMinute as i64 * 60 + t.wSecond as i64) * 1000 + t.wMilliseconds as i64;
+    crate::pc::now_ms() - since_midnight + minutes as i64 * 60_000
 }
 
 fn minutes(hhmm: &str) -> Option<u32> {
@@ -194,9 +277,28 @@ fn tag(e: &work::Entry) -> String {
     if e.tipo.is_empty() || e.tipo == "Ticket" { format!("#{}", if e.ticket.is_empty() { "—" } else { &e.ticket }) } else { e.tipo.clone() }
 }
 
-pub fn spawn() {
+pub fn spawn(dir: PathBuf) {
     bus::keep("pc", json!({ "locked": false }));
-    thread::spawn(|| {
+    session_events();
+    let alive = dir.join("vivo.txt");
+    // Something left running while the app was closed or the PC was off: cut it at the last minute
+    // the PC was seen in use, and say so.
+    let last_seen: Option<i64> = std::fs::read_to_string(&alive).ok().and_then(|t| t.trim().parse().ok());
+    if let Some(seen) = last_seen.filter(|t| crate::pc::now_ms() - t > 15 * 60_000) {
+        if let Some((e, cut)) = work::cut_running(seen) {
+            let hm = |ms: i64| {
+                let m = ((ms - today_at(0)).rem_euclid(86_400_000)) / 60_000;
+                format!("{:02}:{:02}", m / 60, m % 60)
+            };
+            diag::log(&format!("abertura: {} cortado em {cut}", e.id));
+            bus::keep(
+                "sugestao",
+                json!({ "id": "cortado", "text": format!("{} ficou rodando com a IlhaBox fechada", tag(&e)), "detail": format!("Parei às {}, o último momento em que o PC estava em uso. Confira em Horas.", hm(cut)),
+                        "actions": [{ "label": "Ver em Horas", "go": "horas" }, { "label": "Ok" }], "at": crate::pc::now_ms() }),
+            );
+        }
+    }
+    thread::spawn(move || {
         let ua = automation();
         let mut url: Option<String> = None;
         let mut url_at = Instant::now();
@@ -210,6 +312,9 @@ pub fn spawn() {
         let mut last_idle_note: Option<Instant> = None;
         let mut long_noted: Option<(u64, i64)> = None;
         let mut closing_noted: Option<u16> = None;
+        let mut shift_end_noted: Option<u16> = None;
+        let mut morning_noted: Option<u16> = None;
+        let mut beat = Instant::now() - Duration::from_secs(120);
         loop {
             thread::sleep(Duration::from_secs(1));
             let cfg = config::get();
@@ -247,6 +352,10 @@ pub fn spawn() {
             }
             if now_locked {
                 continue;
+            }
+            if beat.elapsed() >= Duration::from_secs(60) {
+                beat = Instant::now();
+                let _ = std::fs::write(&alive, crate::pc::now_ms().to_string());
             }
 
             let entries = work::snapshot();
@@ -311,7 +420,36 @@ pub fn spawn() {
                 );
             }
 
-            let (min, weekday) = local_clock();
+            let (min, weekday, mday) = local_clock();
+
+            // First time the PC is in use today: what was left unposted on the previous days.
+            if morning_noted != Some(mday) {
+                morning_noted = Some(mday);
+                let n = work::unsent_before(today_at(0));
+                if n > 0 {
+                    suggest(
+                        &format!("manha-{mday}"),
+                        &format!("Ficaram {n} período(s) sem lançar no Movidesk"),
+                        "de dias anteriores",
+                        json!([{ "label": "Lançar agora", "go": "fechamento", "args": { "anterior": true } }, { "label": "Depois" }]),
+                    );
+                }
+            }
+
+            // End of the shift: what is still running stops there; the phone asks if you stayed.
+            if let Some(end) = minutes(&cfg.fim_turno) {
+                if (1..=5).contains(&weekday) && min >= end && shift_end_noted != Some(mday) {
+                    shift_end_noted = Some(mday);
+                    if let Some((e, _)) = work::cut_running(today_at(end)) {
+                        suggest(
+                            "fim-turno",
+                            &format!("Pausei {} às {} (fim do turno)", tag(&e), cfg.fim_turno),
+                            "Ainda está trabalhando nisso?",
+                            json!([{ "label": "Sim, continuar contando", "cmd": "work_reopen", "args": { "id": e.id } }, { "label": "Não, pode parar" }]),
+                        );
+                    }
+                }
+            }
             let shift = (1..=5).contains(&weekday)
                 && minutes(&cfg.inicio_turno).is_none_or(|s| min >= s)
                 && minutes(&cfg.fim_turno).is_none_or(|e| min < e);
@@ -353,13 +491,19 @@ pub fn spawn() {
             // Ten minutes before the end of the shift: what is still to post in Movidesk.
             if let Some(end) = minutes(&cfg.fim_turno) {
                 if (1..=5).contains(&weekday) && min + 10 >= end && min < end + 60 && closing_noted != Some(weekday) {
-                    let pending = entries.iter().filter(|e| e.done && !e.sent && e.tipo != "Almoço" && crate::pc::now_ms() - e.start < 86_400_000).count();
+                    let today = today_at(0);
+                    let pending = entries
+                        .iter()
+                        .filter(|e| e.tipo != "Almoço")
+                        .flat_map(|e| e.segs.iter())
+                        .filter(|g| g.e.is_some() && !g.sent && g.s >= today)
+                        .count();
                     closing_noted = Some(weekday);
                     if pending > 0 {
                         suggest(
                             "fechamento",
                             "Fechamento do dia",
-                            &format!("{pending} apontamento(s) para lançar no Movidesk"),
+                            &format!("{pending} período(s) para lançar no Movidesk"),
                             json!([{ "label": "Lançar agora", "go": "fechamento" }, { "label": "Depois" }]),
                         );
                     }

@@ -4,7 +4,7 @@ import {
 import { createMemo, createSignal, For, Index, Show, type JSX } from "solid-js";
 import { cmd } from "../../lib/api";
 import {
-  atClock, byKind, clock, config, DAY, dayText, dur, entries, entriesOf, gaps, hhmm, isLunch, isPaused, isRunning, isTicket, kind, length,
+  atClock, byKind, clock, config, DAY, dayText, dur, entries, entriesOf, fullEntry, gaps, lastUnsentDay, hhmm, isLunch, isPaused, isRunning, isTicket, kind, length,
   LUNCH, now, paused, pending, periods, running, segText, startOfDay, tag, worked, type Entry, type Seg,
 } from "../../lib/state";
 import { feedback, note } from "../ui";
@@ -18,18 +18,20 @@ const [noting, setNoting] = createSignal<number | null>(null);
 const [closing, setClosing] = createSignal(false);
 const [tipo, setTipo] = createSignal("Ticket");
 
-/** Opens the end-of-day list (from the suggestion at the end of the shift). */
-export const openClosing = (): void => {
-  setDay(startOfDay(Date.now()));
+/** Opens the posting list: today, or the last earlier day with periods left to post. */
+export const openClosing = (earlier = false): void => {
+  setDay(earlier ? (lastUnsentDay() ?? startOfDay(Date.now())) : startOfDay(Date.now()));
   setView("dia");
   setClosing(true);
 };
+
+const markSent = (e: Entry, g: Seg) => cmd("work_sent", { periods: [{ id: e.id, s: g.s }] });
 
 /** One period goes straight to the clipboard; several open a list, one copy per period. */
 async function copyEntry(e: Entry): Promise<void> {
   if (e.segs.length > 1) return void setCopying(e);
   await cmd("copiar", { texto: segText(e, e.segs[0]) });
-  if (e.done && !e.sent) await cmd("work_sent", { ids: [e.id] });
+  if (e.segs[0].e != null && !e.segs[0].sent) await markSent(e, e.segs[0]);
   note("Copiado no PC: cole no Movidesk");
 }
 
@@ -259,14 +261,14 @@ function EntryRow(p: { e: Entry }): JSX.Element {
       classList={{ live: isRunning(e()), paused: isPaused(e()), sent: e().sent, lunch: isLunch(e()) }}
       onContextMenu={(ev) => {
         ev.preventDefault();
-        setEditing(e());
+        setEditing(fullEntry(e().id) ?? e());
       }}
     >
       <div class="e-time mono">
         <span>{hhmm(e().start)}</span>
         <span class="dim">{isRunning(e()) ? "agora" : isPaused(e()) ? "pausa" : hhmm(e().end ?? e().start)}</span>
       </div>
-      <div class="e-body" onClick={() => setEditing(e())}>
+      <div class="e-body" onClick={() => setEditing(fullEntry(e().id) ?? e())}>
         <div class="e-top">
           <b classList={{ mono: isTicket(e()), kind: !isTicket(e()) }}>{tag(e())}</b>
           <span class="mono dim">{dur(length(e(), now()))}</span>
@@ -417,8 +419,9 @@ function EditSheet(p: { entry: Entry; close: () => void }): JSX.Element {
 
   const save = () => {
     const args: Record<string, unknown> = {
-      id: e.id, tipo: t(), ticket: (ticket?.value ?? "").replace(/^#/, ""), desc: desc.value, sent: sent.checked, segs: segs(),
+      id: e.id, tipo: t(), ticket: (ticket?.value ?? "").replace(/^#/, ""), desc: desc.value, segs: segs(),
     };
+    if (sent.checked !== e.sent) args.sent = sent.checked;
     void cmd("work_update", args).then(p.close, feedback);
   };
   const remove = () => void cmd("work_delete", { id: e.id }).then(p.close, feedback);
@@ -440,7 +443,7 @@ function EditSheet(p: { entry: Entry; close: () => void }): JSX.Element {
             <input ref={ticket} class="mono" value={e.ticket} inputmode="numeric" disabled={t() !== "Ticket"} />
           </label>
           <label class="check">
-            <input ref={sent} type="checkbox" checked={e.sent} /> Já lançado no Movidesk
+            <input ref={sent} type="checkbox" checked={e.sent} /> Todos os períodos já lançados
           </label>
           <label class="span">
             Descrição
@@ -588,7 +591,7 @@ function CopySheet(p: { entry: Entry; close: () => void }): JSX.Element {
     const next = done().includes(i) ? done() : [...done(), i];
     setDone(next);
     note(`${i + 1}º período copiado no PC`);
-    if (next.length === e.segs.length && e.done && !e.sent) await cmd("work_sent", { ids: [e.id] });
+    if (e.segs[i].e != null) await markSent(e, e.segs[i]);
   };
   return (
     <div class="sheet-bg" onClick={p.close}>
@@ -631,18 +634,17 @@ function CopySheet(p: { entry: Entry; close: () => void }): JSX.Element {
 function ClosingSheet(p: { close: () => void }): JSX.Element {
   const todo = createMemo(() =>
     pending(entriesOf(day()))
-      .flatMap((e) => e.segs.map((g, i) => ({ e, g, i, key: `${e.id}-${i}` })))
+      .map(({ e, g }) => ({ e, g, key: `${e.id}-${g.s}` }))
       .sort((a, b) => a.g.s - b.g.s),
   );
   const [copied, setCopied] = createSignal<string[]>([]);
   const copy = async (row: { e: Entry; g: Seg; key: string }) => {
     await cmd("copiar", { texto: segText(row.e, row.g) });
-    const next = copied().includes(row.key) ? copied() : [...copied(), row.key];
-    setCopied(next);
+    setCopied((l) => (l.includes(row.key) ? l : [...l, row.key]));
     note("Copiado no PC: cole no Movidesk");
-    if (row.e.segs.every((_, i) => next.includes(`${row.e.id}-${i}`))) await cmd("work_sent", { ids: [row.e.id] });
+    await markSent(row.e, row.g);
   };
-  const still = () => paused().filter((e) => startOfDay(e.start) === day());
+  const still = () => entriesOf(day()).filter((e) => isRunning(e) && !isLunch(e));
   return (
     <div class="sheet-bg" onClick={p.close}>
       <div class="sheet" onClick={(ev) => ev.stopPropagation()}>
@@ -654,7 +656,7 @@ function ClosingSheet(p: { close: () => void }): JSX.Element {
         </div>
         <Show when={still().length}>
           <span class="warn small">
-            {still().length} em pausa ainda: {still().map(tag).join(", ")} (conclua pra entrar aqui)
+            Rodando agora: {still().map(tag).join(", ")}. O período aberto entra aqui quando você pausar ou concluir.
           </span>
         </Show>
         <div class="copy-list">

@@ -12,7 +12,7 @@ export function SuggestionCard(): JSX.Element {
   const act = (id: string, a: Action) => {
     if (a.go === "fechamento") {
       go("horas");
-      openClosing();
+      openClosing(!!a.args?.anterior);
     } else if (a.go) go(a.go);
     if (a.cmd) void cmd(a.cmd, a.args ?? {}).catch(feedback);
     close(id);

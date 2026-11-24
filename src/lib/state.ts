@@ -11,7 +11,7 @@ export type Media = {
   positionMs: number; durationMs: number; sampledAt: number; app: string;
 };
 export type WMsg = { id: number; at: number; chat: string; text: string; avatar: string | null };
-export type Seg = { s: number; e: number | null };
+export type Seg = { s: number; e: number | null; sent?: boolean };
 export type Entry = { id: number; tipo: string; ticket: string; desc: string; segs: Seg[]; check?: string[]; done: boolean; start: number; end: number | null; sent: boolean };
 export type Atalho = { id: string; nome: string; tipo: "texto" | "site" | "programa" | "celular"; valor: string; colar: boolean; cor: string };
 export type Config = {
@@ -160,14 +160,36 @@ export const length = (e: Entry, at = now()): number => e.segs.reduce((sum, g) =
 export const LUNCH = "Almoço";
 export const isLunch = (e: Pick<Entry, "tipo">): boolean => e.tipo === LUNCH;
 export const worked = (list: Entry[], at = now()): number => list.filter((e) => !isLunch(e)).reduce((s, e) => s + length(e, at), 0);
-export const pending = (list: Entry[]): Entry[] => list.filter((e) => e.done && !e.sent && !isLunch(e));
+/** Closed periods not yet posted in Movidesk (each period is one Movidesk entry). */
+export const pending = (list: Entry[]): { e: Entry; g: Seg }[] =>
+  list.filter((e) => !isLunch(e)).flatMap((e) => e.segs.filter((g) => g.e != null && !g.sent).map((g) => ({ e, g })));
+/** Most recent day before today with periods still to post. */
+export function lastUnsentDay(): number | null {
+  const today = startOfDay(Date.now());
+  const days = pending(entries()).map(({ g }) => startOfDay(g.s)).filter((d) => d < today);
+  return days.length ? Math.max(...days) : null;
+}
 export const lastEnd = (e: Entry): number => e.segs[e.segs.length - 1]?.e ?? Date.now();
 /** "13:35–13:45, 14:31–14:50" */
 export const periods = (e: Entry, at = Date.now()): string => e.segs.map((g) => `${hhmm(g.s)}–${hhmm(g.e ?? at)}`).join(", ");
 
+/**
+ * The entries of one day, each cut to the periods that happened that day: an activity paused
+ * yesterday and continued today shows yesterday's part yesterday and today's part today.
+ */
 export function entriesOf(day: number): Entry[] {
-  return entries().filter((e) => startOfDay(e.start) === day);
+  const out: Entry[] = [];
+  for (const e of entries()) {
+    const segs = e.segs.filter((g) => startOfDay(g.s) === day);
+    if (!segs.length) continue;
+    const whole = segs.length === e.segs.length;
+    out.push(whole ? e : { ...e, segs, start: segs[0].s, end: segs[segs.length - 1].e, sent: segs.every((g) => g.sent) });
+  }
+  return out.sort((a, b) => a.start - b.start);
 }
+
+/** The full entry (all days) behind a day slice. */
+export const fullEntry = (id: number): Entry | undefined => entries().find((e) => e.id === id);
 
 /** Old entries have no kind: they were all tickets. */
 export const kind = (e: Pick<Entry, "tipo">): string => e.tipo || "Ticket";
