@@ -3,7 +3,7 @@
 //! edge. Low-level hooks only park the cursor and forward events; the page on the phone draws the
 //! pointer and clicks its own elements.
 
-use crate::{adb, bus, diag};
+use crate::{adb, diag, fast};
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -271,12 +271,12 @@ fn forward(rx: Receiver<Ev>) {
     let mut pending: Option<(f64, f64)> = None;
     loop {
         let ev = match pending {
-            Some(_) => rx.recv_timeout(Duration::from_millis(12)).ok(),
+            Some(_) => rx.recv_timeout(Duration::from_millis(6)).ok(),
             None => rx.recv().ok(),
         };
         let flush = |p: &mut Option<(f64, f64)>| {
             if let Some((x, y)) = p.take() {
-                bus::send("ponteiro", json!({ "t": "move", "x": x, "y": y }), false);
+                fast::send(&json!({ "t": "move", "x": x, "y": y }).to_string());
             }
         };
         match ev {
@@ -293,7 +293,7 @@ fn forward(rx: Receiver<Ev>) {
                     Ev::Text(s) => json!({ "t": "text", "text": s }),
                     Ev::Move(..) => continue,
                 };
-                bus::send("ponteiro", v, false);
+                fast::send(&v.to_string());
             }
         }
     }

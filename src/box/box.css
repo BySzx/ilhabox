@@ -265,5 +265,5 @@ input[type="time"] { font-family: var(--mono); }
 }
 
 /* ------------------------------------------------------------ PC mouse on the phone */
-.pointer { position: fixed; left: 0; top: 0; z-index: 100; pointer-events: none; margin: -2px 0 0 -3px; transition: transform 0.03s linear; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6)); }
+.pointer { position: fixed; left: 0; top: 0; z-index: 100; pointer-events: none; margin: -2px 0 0 -3px; will-change: transform; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6)); }
 .pointer.pressed svg { transform: scale(0.85); }

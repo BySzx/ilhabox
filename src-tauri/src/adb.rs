@@ -149,8 +149,11 @@ fn find_easypac(exe: &Path, serial: &str) -> String {
 }
 
 fn tunnel(exe: &Path, serial: &str) -> Result<String, String> {
-    let port = format!("tcp:{PORT}");
-    adb(exe, &["-s", serial, "reverse", &port, &port])
+    for p in [PORT, crate::fast::PORT] {
+        let port = format!("tcp:{p}");
+        adb(exe, &["-s", serial, "reverse", &port, &port])?;
+    }
+    Ok(String::new())
 }
 
 fn give_key(exe: &Path, serial: &str, key: &str) -> Result<String, String> {

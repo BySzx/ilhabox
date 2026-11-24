@@ -71,10 +71,25 @@ export async function connect(): Promise<void> {
     const all = JSON.parse((e as MessageEvent<string>).data) as Record<string, unknown>;
     for (const [topic, v] of Object.entries(all)) fire(topic, v);
   });
-  for (const topic of ["media", "media-art", "whats", "whats-history", "work", "config", "phone", "update", "server", "ponteiro"]) {
+  for (const topic of ["media", "media-art", "whats", "whats-history", "work", "config", "phone", "update", "server"]) {
     es.addEventListener(topic, (e) => fire(topic, JSON.parse((e as MessageEvent<string>).data)));
   }
   es.onerror = () => setOnline(false);
+}
+
+/**
+ * The PC mouse comes on its own low-latency stream (port 8778, no Nagle delay on the PC side),
+ * separate from the state feed.
+ */
+export function onPointer(fn: (v: unknown) => void): void {
+  if (demo) return on("ponteiro", fn);
+  const open = () => {
+    if (!key) return void setTimeout(open, 300);
+    const host = location.port === "8777" ? location.hostname : "127.0.0.1";
+    const es = new EventSource(`http://${host}:8778/ponteiro?k=${encodeURIComponent(key)}`);
+    es.onmessage = (e: MessageEvent<string>) => fn(JSON.parse(e.data));
+  };
+  open();
 }
 
 /** The Android shell's bridge (absent in the PC window and in a desktop browser). */

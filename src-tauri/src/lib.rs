@@ -6,6 +6,7 @@ mod bus;
 mod cmd;
 mod config;
 mod diag;
+mod fast;
 mod lyrics;
 mod media;
 mod mouse;
@@ -101,6 +102,7 @@ pub fn run() {
             config::init(dir.clone());
             work::init(dir.clone());
             server::spawn(app.handle().clone(), key.clone());
+            fast::spawn(key.clone());
             media::spawn();
             whats::spawn(dir.clone());
             adb::spawn(app.handle().clone(), key);

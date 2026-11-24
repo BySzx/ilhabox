@@ -1,5 +1,5 @@
 import { createSignal, onMount, Show, type JSX } from "solid-js";
-import { on } from "../lib/api";
+import { onPointer } from "../lib/api";
 import { go, page } from "./App";
 
 type Ev =
@@ -31,44 +31,61 @@ function scrollable(el: Element | null): HTMLElement | null {
  */
 export function Pointer(): JSX.Element {
   const [shown, setShown] = createSignal(false);
-  const [pos, setPos] = createSignal({ x: 0, y: 0 });
   const [pressed, setPressed] = createSignal(false);
+  let el!: HTMLDivElement;
+  // The newest position is drawn once per frame, straight on the element (no reactive layer).
+  const target = { x: 0, y: 0 };
+  let frame = 0;
+  const draw = () => {
+    frame = 0;
+    if (el) el.style.transform = `translate3d(${target.x}px, ${target.y}px, 0)`;
+  };
+  const setPos = (p: { x: number; y: number }) => {
+    target.x = p.x;
+    target.y = p.y;
+    if (!frame) frame = requestAnimationFrame(draw);
+  };
   let downAt: Element | null = null;
   let lastWheelPage = 0;
 
   const px = (x: number, y: number) => ({ x: x * innerWidth, y: y * innerHeight });
-  const target = (x: number, y: number) => document.elementFromPoint(x, y);
+  const hit = (x: number, y: number) => document.elementFromPoint(x, y);
 
   onMount(() =>
-    on<Ev>("ponteiro", (e) => {
+    onPointer((raw) => {
+      const e = raw as Ev;
       if (e.t === "off") return void setShown(false);
       if (e.t === "on" || e.t === "move") {
-        setShown(true);
-        return void setPos(px(e.x, e.y));
+        setPos(px(e.x, e.y));
+        if (!shown()) {
+          setShown(true);
+          draw();
+        }
+        return;
       }
       if (e.t === "down" || e.t === "up") {
         const p = px(e.x, e.y);
         setPos(p);
         if (e.button !== "left") return;
-        const el = target(p.x, p.y);
+        const at = hit(p.x, p.y);
         if (e.t === "down") {
           setPressed(true);
-          downAt = el;
+          downAt = at;
           return;
         }
         setPressed(false);
-        if (!el || (downAt && !downAt.contains(el) && !el.contains(downAt))) return;
-        if (editable(el)) {
-          el.focus();
+        if (!at || (downAt && !downAt.contains(at) && !at.contains(downAt))) return;
+        if (editable(at)) {
+          at.focus();
           return;
         }
         (document.activeElement as HTMLElement | null)?.blur?.();
-        el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, view: window }));
+        at.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, view: window }));
         return;
       }
       if (e.t === "wheel") {
         const p = px(e.x, e.y);
-        const box = scrollable(target(p.x, p.y));
+        const box = scrollable(hit(p.x, p.y));
         if (box) return void box.scrollBy({ top: -e.dy * 0.9, behavior: "smooth" });
         // Nothing to scroll under the pointer: the wheel flips between pages.
         if (Date.now() - lastWheelPage < 450) return;
@@ -104,7 +121,7 @@ export function Pointer(): JSX.Element {
 
   return (
     <Show when={shown()}>
-      <div class="pointer" classList={{ pressed: pressed() }} style={{ transform: `translate(${pos().x}px, ${pos().y}px)` }}>
+      <div class="pointer" ref={(r) => ((el = r), draw())} classList={{ pressed: pressed() }}>
         <svg width="22" height="22" viewBox="0 0 24 24">
           <path d="M4 2l16 9.5-7 1.6-3.6 6.9L4 2z" fill="#fff" stroke="#000" stroke-width="1.4" stroke-linejoin="round" />
         </svg>
