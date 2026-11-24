@@ -11,7 +11,8 @@ export type Media = {
   positionMs: number; durationMs: number; sampledAt: number; app: string;
 };
 export type WMsg = { id: number; at: number; chat: string; text: string; avatar: string | null };
-export type Entry = { id: number; tipo: string; ticket: string; desc: string; start: number; end: number | null; sent: boolean };
+export type Seg = { s: number; e: number | null };
+export type Entry = { id: number; tipo: string; ticket: string; desc: string; segs: Seg[]; done: boolean; start: number; end: number | null; sent: boolean };
 export type Atalho = { id: string; nome: string; tipo: "texto" | "site" | "programa" | "celular"; valor: string; colar: boolean; cor: string };
 export type Config = {
   atalhos: Atalho[]; modelo: string; tipos: string[]; metaMin: number; abrirAoConectar: boolean;
@@ -64,7 +65,11 @@ export const onNewMessage = (fn: (m: WMsg) => void): void => void newListeners.a
 // ------------------------------------------------------------------ work, config, phone, update
 
 export const [entries, setEntries] = createSignal<Entry[]>([]);
-export const running = createMemo(() => entries().find((e) => e.end == null) ?? null);
+export const isRunning = (e: Entry): boolean => e.segs.length > 0 && e.segs[e.segs.length - 1].e == null;
+export const isPaused = (e: Entry): boolean => !e.done && !isRunning(e);
+export const running = createMemo(() => entries().find(isRunning) ?? null);
+/** Paused activities, most recently touched first. */
+export const paused = createMemo(() => entries().filter(isPaused).sort((a, b) => lastEnd(b) - lastEnd(a)));
 export const [config, setConfig] = createStore<Config>({
   atalhos: [], modelo: "", tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"], metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
 });
@@ -128,7 +133,10 @@ export function clock(ms: number): string {
   return `${h ? `${h}:` : ""}${String(m).padStart(h ? 2 : 1, "0")}:${String(r).padStart(2, "0")}`;
 }
 
-export const length = (e: Entry, at = now()): number => (e.end ?? at) - e.start;
+export const length = (e: Entry, at = now()): number => e.segs.reduce((sum, g) => sum + ((g.e ?? at) - g.s), 0);
+export const lastEnd = (e: Entry): number => e.segs[e.segs.length - 1]?.e ?? Date.now();
+/** "13:35–13:45, 14:31–14:50" */
+export const periods = (e: Entry, at = Date.now()): string => e.segs.map((g) => `${hhmm(g.s)}–${hhmm(g.e ?? at)}`).join(", ");
 
 export function entriesOf(day: number): Entry[] {
   return entries().filter((e) => startOfDay(e.start) === day);
@@ -144,17 +152,19 @@ export const tag = (e: Entry): string => (isTicket(e) ? `#${e.ticket || "—"}` 
 
 /** Movidesk text of one entry from the template in the settings. */
 export function entryText(e: Entry): string {
-  const end = e.end ?? Date.now();
-  const model = (config.modelo || "{inicio} às {fim} ({duracao}) · {atividade}\n{descricao}").split("Ticket {ticket}").join("{atividade}");
+  const end = lastEnd(e);
+  const total = length(e, Date.now());
+  const model = (config.modelo || "{periodos} ({duracao}) · {atividade}\n{descricao}").split("Ticket {ticket}").join("{atividade}");
   return model
     .split("{atividade}").join(activity(e))
     .split("{tipo}").join(kind(e))
     .split("{ticket}").join(e.ticket || "")
     .split("{descricao}").join(e.desc || "")
+    .split("{periodos}").join(periods(e))
     .split("{inicio}").join(hhmm(e.start))
     .split("{fim}").join(hhmm(end))
-    .split("{duracao}").join(dur(end - e.start))
-    .split("{horas}").join(hhmmDur(end - e.start))
+    .split("{duracao}").join(dur(total))
+    .split("{horas}").join(hhmmDur(total))
     .split("{data}").join(ddmmyyyy(e.start))
     .trim();
 }
@@ -169,7 +179,7 @@ export function byKind(list: Entry[], at = Date.now()): [string, number][] {
 export function dayText(day: number): string {
   const list = entriesOf(day);
   const total = list.reduce((s, e) => s + length(e, Date.now()), 0);
-  const lines = list.map((e) => `• ${hhmm(e.start)}–${hhmm(e.end ?? Date.now())} (${dur(length(e, Date.now()))}) ${activity(e)}${e.desc ? ` — ${e.desc}` : ""}`);
+  const lines = list.map((e) => `• ${periods(e)} (${dur(length(e, Date.now()))}) ${activity(e)}${e.desc ? ` — ${e.desc}` : ""}${isPaused(e) ? " [em pausa]" : ""}`);
   const kinds = byKind(list).map(([k, ms]) => `${k} ${dur(ms)}`).join(" · ");
   return [`Resumo de ${ddmmyyyy(day)}`, ...lines, `Total: ${dur(total)}${kinds ? ` (${kinds})` : ""}`].join("\n");
 }

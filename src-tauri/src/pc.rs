@@ -8,7 +8,6 @@ use windows::Win32::Foundation::{HANDLE, HGLOBAL};
 use windows::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 use windows::Win32::System::Ole::CF_UNICODETEXT;
-use windows::Win32::System::Time::{GetTimeZoneInformation, TIME_ZONE_INFORMATION};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CONTROL, VK_V,
 };
@@ -66,15 +65,6 @@ pub fn paste() {
     unsafe {
         SendInput(&seq, std::mem::size_of::<INPUT>() as i32);
     }
-}
-
-/// Minutes to add to UTC for the PC's local time (Brazil: -180).
-pub fn utc_offset_min() -> i64 {
-    let mut tz = TIME_ZONE_INFORMATION::default();
-    let id = unsafe { GetTimeZoneInformation(&mut tz) };
-    // 2 = TIME_ZONE_ID_DAYLIGHT
-    let bias = tz.Bias + if id == 2 { tz.DaylightBias } else { tz.StandardBias };
-    -(bias as i64)
 }
 
 pub fn now_ms() -> i64 {

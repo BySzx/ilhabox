@@ -1,16 +1,15 @@
-import { Pause, Play, Plus, SkipForward, Square } from "lucide-solid";
+import { Check, Pause, Play, Plus, SkipForward } from "lucide-solid";
 import { createMemo, For, Show, type JSX } from "solid-js";
-import { cmd } from "../../lib/api";
-import { art, clock, config, control, dur, entriesOf, isTicket, length, media, msgs, now, running, startOfDay, tag } from "../../lib/state";
+import { art, clock, config, control, dur, entriesOf, isTicket, length, media, msgs, now, paused, running, startOfDay, tag } from "../../lib/state";
+import { finish, pause, resume } from "./Horas";
 import { go } from "../App";
-import { feedback } from "../ui";
 import { ago, initials, tint } from "../whatsUi";
 
 export function Inicio(): JSX.Element {
   const today = createMemo(() => entriesOf(startOfDay(now())));
   const total = () => today().reduce((s, e) => s + length(e, now()), 0);
   const goal = () => Math.max(1, config.metaMin) * 60000;
-  const pending = () => today().filter((e) => e.end != null && !e.sent).length;
+  const pending = () => today().filter((e) => e.done && !e.sent).length;
   const date = () => new Date(now()).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
   const recent = () => msgs().slice(-3).reverse();
 
@@ -35,11 +34,36 @@ export function Inicio(): JSX.Element {
         <Show
           when={running()}
           fallback={
-            <div class="idle">
-              <div class="plus"><Plus size={30} /></div>
-              <b>Começar apontamento</b>
-              <span class="dim">toque para abrir as horas</span>
-            </div>
+            <Show
+              when={paused()[0]}
+              fallback={
+                <div class="idle">
+                  <div class="plus"><Plus size={30} /></div>
+                  <b>Começar apontamento</b>
+                  <span class="dim">toque para abrir as horas</span>
+                </div>
+              }
+            >
+              {(p) => (
+                <>
+                  <span class="label amber-text">Em pausa</span>
+                  <div class="t-head">
+                    <span class="ticket" classList={{ mono: isTicket(p()) }}>{tag(p())}</span>
+                    <span class="desc">{p().desc}</span>
+                  </div>
+                  <div class="watch mono dim">{clock(length(p(), now()))}</div>
+                  <button
+                    class="btn green"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resume(p());
+                    }}
+                  >
+                    <Play size={16} /> Continuar
+                  </button>
+                </>
+              )}
+            </Show>
           }
         >
           {(r) => (
@@ -50,15 +74,14 @@ export function Inicio(): JSX.Element {
                 <span class="desc">{r().desc || "Sem descrição"}</span>
               </div>
               <div class="watch mono">{clock(length(r(), now()))}</div>
-              <button
-                class="btn red"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void cmd("work_stop").catch(feedback);
-                }}
-              >
-                <Square size={16} /> Parar
-              </button>
+              <div class="row" onClick={(e) => e.stopPropagation()}>
+                <button class="btn amber" onClick={pause}>
+                  <Pause size={16} /> Pausar
+                </button>
+                <button class="btn red" onClick={() => finish(r().id)}>
+                  <Check size={16} /> Concluir
+                </button>
+              </div>
             </>
           )}
         </Show>

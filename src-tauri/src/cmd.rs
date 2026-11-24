@@ -47,7 +47,9 @@ pub fn run(app: &AppHandle, name: &str, args: Value) -> Result<Value, String> {
             Ok(json!(tauri::async_runtime::block_on(lyrics::lyrics(&artist, &title, &album, dur))))
         }
         "work_start" => work::start(&args),
-        "work_stop" => work::stop(),
+        "work_stop" | "work_finish" => work::finish(&args),
+        "work_pause" => work::pause(),
+        "work_resume" => work::resume(&args),
         "work_update" => work::update(&args),
         "work_delete" => work::remove(&args),
         "work_sent" => work::mark_sent(&args),

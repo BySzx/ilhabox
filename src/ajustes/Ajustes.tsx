@@ -63,8 +63,13 @@ export function Ajustes(): JSX.Element {
         return c;
       }),
     );
-  const preview = () =>
-    entryText({ id: 0, tipo: "Ticket", ticket: "48230", desc: "Erro ao emitir NF-e, certificado vencido", start: Date.now() - 67 * 60000, end: Date.now(), sent: false });
+  const preview = () => {
+    const t = Date.now();
+    return entryText({
+      id: 0, tipo: "Ticket", ticket: "48230", desc: "Erro ao emitir NF-e, certificado vencido", done: true, sent: false, start: t - 90 * 60000, end: t,
+      segs: [{ s: t - 90 * 60000, e: t - 60 * 60000 }, { s: t - 30 * 60000, e: t }],
+    });
+  };
 
   return (
     <div class="wrap">
@@ -137,7 +142,7 @@ export function Ajustes(): JSX.Element {
             <textarea rows={3} class="mono" value={draft.modelo} onInput={(e) => edit(() => setDraft("modelo", e.currentTarget.value))} />
           </label>
           <span class="hint">
-            Campos: <code>{"{atividade}"}</code> (Ticket 48230 ou Reunião) <code>{"{tipo}"}</code> <code>{"{ticket}"}</code> <code>{"{descricao}"}</code> <code>{"{inicio}"}</code> <code>{"{fim}"}</code> <code>{"{duracao}"}</code> (1h07){" "}
+            Campos: <code>{"{atividade}"}</code> (Ticket 48230 ou Reunião) <code>{"{tipo}"}</code> <code>{"{ticket}"}</code> <code>{"{descricao}"}</code> <code>{"{periodos}"}</code> (13:35–13:45, 14:31–14:50) <code>{"{inicio}"}</code> <code>{"{fim}"}</code> <code>{"{duracao}"}</code> (1h07){" "}
             <code>{"{horas}"}</code> (01:07) <code>{"{data}"}</code>
           </span>
           <pre class="preview">{preview()}</pre>

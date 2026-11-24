@@ -20,11 +20,14 @@ export function seed(f: Fire): void {
   fire = f;
   (window as unknown as { __fire: Fire }).__fire = f;
   const now = Date.now();
+  const mk = (id: number, tipo: string, ticket: string, desc: string, segs: [number, number | null][], done: boolean, sent = false): Entry => ({
+    id, tipo, ticket, desc, segs: segs.map(([s, e]) => ({ s, e })), done, sent, start: segs[0][0], end: done ? segs[segs.length - 1][1] : null,
+  });
   entries = [
-    { id: 1, tipo: "Ticket", ticket: "48211", desc: "Cliente sem acesso ao módulo financeiro, senha resetada", start: at(8, 4), end: at(8, 41), sent: true },
-    { id: 2, tipo: "Ticket", ticket: "48230", desc: "Erro ao emitir NF-e, certificado vencido", start: at(8, 45), end: at(9, 52), sent: false },
-    { id: 3, tipo: "Reunião", ticket: "", desc: "Alinhamento semanal do suporte", start: at(9, 58), end: at(10, 20), sent: false },
-    { id: 4, tipo: "Ticket", ticket: "48241", desc: "Integração travando na sincronização", start: now - 23 * 60000 - 17000, end: null, sent: false },
+    mk(1, "Ticket", "48211", "Cliente sem acesso ao módulo financeiro, senha resetada", [[at(8, 4), at(8, 41)]], true, true),
+    mk(2, "Curso", "", "curso sql rhgestor", [[at(13, 35), at(13, 45)]], false),
+    mk(3, "WhatsApp", "", "dúvida sobre status inativo plano de ação", [[at(13, 48), at(14, 10)]], true),
+    mk(4, "Reunião", "", "levantamento de requisitos", [[now - 23 * 60000 - 17000, null]], false),
   ];
   config = {
     atalhos: [
@@ -34,7 +37,7 @@ export function seed(f: Fire): void {
       { id: "encerrar", nome: "Encerramento", tipo: "texto", valor: "Ficou alguma dúvida?", colar: true, cor: "#a78bfa" },
       { id: "acesso", nome: "Acesso remoto", tipo: "programa", valor: "C:\\anydesk.exe", colar: false, cor: "#f472b6" },
     ],
-    modelo: "{inicio} às {fim} ({duracao}) · {atividade}\n{descricao}",
+    modelo: "{periodos} ({duracao}) · {atividade}\n{descricao}",
     tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"],
     metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
   };
@@ -59,12 +62,31 @@ export function seed(f: Fire): void {
 
 export function demoCmd(name: string, args: Record<string, unknown>): unknown {
   const now = Date.now();
+  const pauseAll = () => entries.forEach((e) => {
+    const l = e.segs[e.segs.length - 1];
+    if (l && l.e == null) l.e = now;
+  });
+  const refresh = (e: Entry) => ({ ...e, segs: e.segs.map((g) => ({ ...g })), start: e.segs[0].s, end: e.done ? e.segs[e.segs.length - 1].e : null });
   if (name === "work_start") {
-    entries = entries.map((e) => (e.end == null ? { ...e, end: now } : e));
-    entries.push({ id: entries.length + 1, tipo: String(args.tipo ?? "Ticket"), ticket: args.tipo === "Ticket" ? String(args.ticket ?? "") : "", desc: String(args.desc ?? ""), start: now, end: null, sent: false });
-  } else if (name === "work_stop") entries = entries.map((e) => (e.end == null ? { ...e, end: now } : e));
-  else if (name === "work_delete") entries = entries.filter((e) => e.id !== args.id);
-  else if (name === "work_update") entries = entries.map((e) => (e.id === args.id ? { ...e, ...args } as Entry : e));
+    pauseAll();
+    entries.push({ id: entries.length + 1, tipo: String(args.tipo ?? "Ticket"), ticket: args.tipo === "Ticket" ? String(args.ticket ?? "") : "", desc: String(args.desc ?? ""), segs: [{ s: now, e: null }], done: false, sent: false, start: now, end: null });
+  } else if (name === "work_pause") pauseAll();
+  else if (name === "work_resume") {
+    pauseAll();
+    const e = entries.find((x) => x.id === args.id);
+    if (e) {
+      e.segs.push({ s: now, e: null });
+      e.done = false;
+    }
+  } else if (name === "work_finish" || name === "work_stop") {
+    const e = args.id != null ? entries.find((x) => x.id === args.id) : entries.find((x) => x.segs[x.segs.length - 1].e == null);
+    if (e) {
+      const l = e.segs[e.segs.length - 1];
+      if (l.e == null) l.e = now;
+      e.done = true;
+    }
+  } else if (name === "work_delete") entries = entries.filter((e) => e.id !== args.id);
+  else if (name === "work_update") entries = entries.map((e) => (e.id === args.id ? ({ ...e, ...args } as Entry) : e));
   else if (name === "work_sent") entries = entries.map((e) => ((args.ids as number[]).includes(e.id) ? { ...e, sent: true } : e));
   else if (name === "config_set") {
     config = args as unknown as Config;
@@ -72,7 +94,7 @@ export function demoCmd(name: string, args: Record<string, unknown>): unknown {
   } else if (name === "lyrics") {
     return Array.from({ length: 12 }, (_, i) => `[00:${String(40 + i * 4).padStart(2, "0")}.00]Linha ${i + 1} da letra de exemplo`).join("\n");
   }
-  entries = [...entries];
+  entries = entries.map(refresh);
   publish();
   return null;
 }

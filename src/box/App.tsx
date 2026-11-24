@@ -2,7 +2,7 @@ import { Clock3, House, LayoutGrid, MessageCircle, Music, Download } from "lucid
 import { createSignal, For, onMount, Show, type JSX } from "solid-js";
 import { cmd, online, phone } from "../lib/api";
 import { rgba } from "../lib/color";
-import { artColor, clock, length, now, onNewMessage, running, tag, toast, update } from "../lib/state";
+import { artColor, clock, length, now, onNewMessage, paused, running, tag, toast, update } from "../lib/state";
 import { Atalhos } from "./pages/Atalhos";
 import { Horas } from "./pages/Horas";
 import { Inicio } from "./pages/Inicio";
@@ -44,7 +44,20 @@ export function App(): JSX.Element {
           <span class="dot" classList={{ off: !online() }} />
           IlhaBox
         </div>
-        <Show when={running()}>
+        <Show
+          when={running()}
+          fallback={
+            <Show when={paused()[0]}>
+              {(p) => (
+                <button class="pill amber" onClick={() => go("horas")}>
+                  <span class="bars" />
+                  <span>Pausado</span>
+                  <span class="dim">{tag(p())}</span>
+                </button>
+              )}
+            </Show>
+          }
+        >
           {(r) => (
             <button class="pill" onClick={() => go("horas")}>
               <span class="rec" />
@@ -53,7 +66,7 @@ export function App(): JSX.Element {
             </button>
           )}
         </Show>
-        <div class="bar-end">
+        <div class="bar-end" classList={{ alone: !running() && !paused()[0] }}>
           <Show when={update().version}>
             <button class="chip green" onClick={() => void cmd("update_install").then(() => note("Atualizando o PC…"), feedback)}>
               <Download size={14} />
