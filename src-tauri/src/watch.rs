@@ -15,7 +15,8 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Accessibility::{
-    CUIAutomation, IUIAutomation, IUIAutomationValuePattern, TreeScope_Descendants, UIA_ControlTypePropertyId, UIA_EditControlTypeId, UIA_ValuePatternId,
+    CUIAutomation, IUIAutomation, IUIAutomationValuePattern, TreeScope_Descendants, UIA_ControlTypePropertyId, UIA_DocumentControlTypeId,
+    UIA_EditControlTypeId, UIA_NamePropertyId, UIA_TextControlTypeId, UIA_ValuePatternId,
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW};
 
@@ -51,6 +52,33 @@ fn browser_url(ua: &IUIAutomation, hwnd: HWND) -> Option<String> {
         let url = value.CurrentValue().ok()?.to_string();
         (url.contains('.') && !url.contains(' ')).then_some(url)
     }
+}
+
+/// Texts of the page shown in a browser window, in reading order (names fetched in one batch).
+fn page_texts(ua: &IUIAutomation, hwnd: HWND) -> Option<Vec<String>> {
+    unsafe {
+        let root = ua.ElementFromHandle(hwnd).ok()?;
+        let doc_cond = ua.CreatePropertyCondition(UIA_ControlTypePropertyId, &VARIANT::from(UIA_DocumentControlTypeId.0)).ok()?;
+        let doc = root.FindFirst(TreeScope_Descendants, &doc_cond).ok()?;
+        let text_cond = ua.CreatePropertyCondition(UIA_ControlTypePropertyId, &VARIANT::from(UIA_TextControlTypeId.0)).ok()?;
+        let cache = ua.CreateCacheRequest().ok()?;
+        cache.AddProperty(UIA_NamePropertyId).ok()?;
+        let all = doc.FindAllBuildCache(TreeScope_Descendants, &text_cond, &cache).ok()?;
+        let n = all.Length().ok()?.min(6000);
+        Some((0..n).filter_map(|i| all.GetElement(i).ok()?.CachedName().ok().map(|b| b.to_string().trim().to_string())).filter(|t| !t.is_empty()).collect())
+    }
+}
+
+/// Subject of the open Movidesk ticket: the line right above "Ticket aberto via … em …".
+pub fn ticket_subject(texts: &[String]) -> Option<String> {
+    let at = texts.iter().position(|t| t.starts_with("Ticket aberto") || t.contains(" aberto via "))?;
+    texts[..at].iter().rev().find(|t| t.chars().count() > 3 && t.chars().count() < 200 && !t.chars().all(|c| c.is_ascii_digit())).cloned()
+}
+
+/// Subject of the ticket in the browser window in front (slow: reads the whole page).
+pub fn foreground_subject() -> Option<String> {
+    let ua = automation()?;
+    page_texts(&ua, unsafe { GetForegroundWindow() }).as_deref().and_then(ticket_subject)
 }
 
 fn automation() -> Option<IUIAutomation> {
@@ -172,6 +200,7 @@ pub fn spawn() {
         let ua = automation();
         let mut url: Option<String> = None;
         let mut url_at = Instant::now();
+        let mut subjects: HashMap<String, String> = HashMap::new();
         let mut was_locked = false;
         let mut locked_at = Instant::now();
         let mut paused_by_lock: Option<u64> = None;
@@ -238,8 +267,13 @@ pub fn spawn() {
                 url = ua.as_ref().and_then(|ua| browser_url(ua, unsafe { GetForegroundWindow() }));
                 url_at = Instant::now();
             }
+            // The subject is on the page itself: read once per ticket, when the ticket is first seen.
             let from_url = url.as_deref().and_then(parse_ticket_url).map(|n| {
-                let subject = parse_ticket(&title, &cfg.movidesk_palavra).map(|t| t.1).unwrap_or_default();
+                if !subjects.contains_key(&n) && title_since.1.elapsed() >= Duration::from_secs(3) {
+                    let found = ua.as_ref().and_then(|ua| page_texts(ua, unsafe { GetForegroundWindow() })).as_deref().and_then(ticket_subject);
+                    subjects.insert(n.clone(), found.unwrap_or_default());
+                }
+                let subject = subjects.get(&n).cloned().unwrap_or_default();
                 (n, subject)
             });
             if title_since.1.elapsed() >= Duration::from_secs(3) {
@@ -350,5 +384,9 @@ mod tests {
         assert_eq!(super::parse_ticket_url("atak.movidesk.com/Ticket/EditByProtocol/202611034537"), Some("202611034537".into()));
         assert_eq!(super::parse_ticket_url("https://atak.movidesk.com/Ticket/Edit/48230?x=1"), Some("48230".into()));
         assert_eq!(super::parse_ticket_url("atak.movidesk.com/Ticket"), None);
+        let page: Vec<String> = ["UNIÃO AVICOLA", "202611034537", "Problema ao gerar qr code", "Ticket aberto via sistema pelo agente ALEXANDRE em 23/11/2026 16:49"]
+            .map(String::from)
+            .to_vec();
+        assert_eq!(super::ticket_subject(&page), Some("Problema ao gerar qr code".into()));
     }
 }

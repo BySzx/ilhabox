@@ -57,7 +57,7 @@ pub fn run(app: &AppHandle, name: &str, args: Value) -> Result<Value, String> {
             let ticket = url
                 .as_deref()
                 .and_then(crate::watch::parse_ticket_url)
-                .map(|n| (n, String::new()))
+                .map(|n| (n, crate::watch::foreground_subject().unwrap_or_default()))
                 .or_else(|| crate::watch::parse_ticket(&title, &config::get().movidesk_palavra));
             Ok(json!({ "title": title, "url": url, "ticket": ticket }))
         }
