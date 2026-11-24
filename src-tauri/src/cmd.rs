@@ -72,6 +72,13 @@ pub fn run(app: &AppHandle, name: &str, args: Value) -> Result<Value, String> {
         "whats_abrir" => Ok(json!(whats::focus())),
         "whats_limpar" => whats::clear(&str_arg(&args, "chat")),
         "abrir_celular_app" => open_phone_app(&str_arg(&args, "pacote")),
+        "desligar_pc" => {
+            let paused = work::pause_running();
+            crate::diag::log(&format!("desligar pelo celular; pausado={paused:?}"));
+            let windir = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
+            let exe = format!("{windir}\\System32\\shutdown.exe");
+            pc::run(&exe, &["/s", "/t", "0"]).map(|_| Value::Null)
+        }
         "celular_home" => {
             let (exe, serial) = adb::current()?;
             pc::run(&exe.to_string_lossy(), &["-s", &serial, "shell", "input", "keyevent", "KEYCODE_HOME"]).map(|_| Value::Null)

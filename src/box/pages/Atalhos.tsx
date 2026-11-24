@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, ClipboardCopy, Globe, House, MessageCircle, Pencil, Plus, Rocket, Smartphone, Trash2, Type, X } from "lucide-solid";
+import { Check, ChevronLeft, ChevronRight, ClipboardCopy, Globe, House, MessageCircle, Pencil, Plus, Power, Rocket, Smartphone, Trash2, Type, X } from "lucide-solid";
 import { createSignal, For, Show, type JSX } from "solid-js";
 import { unwrap } from "solid-js/store";
 import { cmd, phone } from "../../lib/api";
@@ -43,6 +43,19 @@ export function Atalhos(): JSX.Element {
   const [editing, setEditing] = createSignal(false);
   const [sheet, setSheet] = createSignal<{ a: Atalho; index: number } | null>(null);
   const home = () => (phone ? phone.home() : void cmd("celular_home").catch(feedback));
+  // Two taps: the first arms it for 3 s, the second shuts the PC down (a brush of the finger never does).
+  const [armed, setArmed] = createSignal(false);
+  let armT = 0;
+  const shutdown = () => {
+    if (!armed()) {
+      setArmed(true);
+      clearTimeout(armT);
+      armT = window.setTimeout(() => setArmed(false), 3000);
+      return;
+    }
+    setArmed(false);
+    void cmd("desligar_pc").then(() => note("Desligando o PC…"), feedback);
+  };
   const fresh = (): Atalho => ({ id: `a${Date.now().toString(36)}`, nome: "", tipo: "texto", valor: "", colar: true, cor: CORES[config.atalhos.length % CORES.length] });
 
   return (
@@ -86,6 +99,11 @@ export function Atalhos(): JSX.Element {
             <MessageCircle size={26} />
             <b>WhatsApp no PC</b>
             <span>traz a janela pra frente</span>
+          </button>
+          <button class="tile sys power" classList={{ armed: armed() }} onClick={shutdown}>
+            <Power size={26} />
+            <b>{armed() ? "Toque de novo" : "Desligar PC"}</b>
+            <span>{armed() ? "pra desligar agora" : "pausa o apontamento e desliga"}</span>
           </button>
           <button class="tile sys" onClick={() => void cmd("copiar", { texto: dayText(startOfDay(Date.now())) }).then(() => note("Resumo do dia copiado no PC"), feedback)}>
             <ClipboardCopy size={26} />

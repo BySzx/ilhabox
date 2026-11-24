@@ -229,6 +229,9 @@ input[type="time"] { font-family: var(--mono); }
 .tile.sys { --c: #e5e7eb; }
 .tile.sys.easypac { --c: #fbbf24; }
 .tile.off { opacity: 0.5; }
+.tile.sys.power { --c: #f87171; }
+.tile.sys.power.armed { --c: #ef4444; animation: pulse 0.8s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(0.97); } }
 
 /* ------------------------------------------------------------ overlays */
 .wtoast {
