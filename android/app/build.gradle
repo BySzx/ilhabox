@@ -1,0 +1,47 @@
+plugins {
+    id "com.android.application"
+}
+
+// One number, read by this build and by the PC side (src-tauri/src/adb.rs): when the PC ships a
+// higher one than the phone has, it reinstalls the app over USB.
+def versao = file("../versao.txt").text.trim().toInteger()
+
+android {
+    namespace "dev.alexandre.ilhabox"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "dev.alexandre.ilhabox"
+        minSdk 23
+        targetSdk 35
+        versionCode versao
+        versionName "1.${versao}"
+    }
+
+    // Sideloaded on one test phone only; a fixed key lets each new version install over the old one.
+    signingConfigs {
+        release {
+            storeFile file("../ilhabox.jks")
+            storePassword "ilhabox"
+            keyAlias "ilhabox"
+            keyPassword "ilhabox"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

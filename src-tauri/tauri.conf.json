@@ -1,0 +1,68 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "IlhaBox",
+  "version": "0.1.0",
+  "identifier": "dev.alexandre.ilhabox",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1430",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "ajustes",
+        "title": "IlhaBox",
+        "url": "index.html",
+        "width": 920,
+        "height": 680,
+        "minWidth": 720,
+        "minHeight": 520,
+        "visible": false,
+        "center": true,
+        "backgroundColor": [
+          12,
+          12,
+          14,
+          255
+        ]
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src ipc: http://ipc.localhost http://127.0.0.1:8777 ws://localhost:1430"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "resources/ilhabox.apk": "ilhabox.apk"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI2OUFEODgxNzc0MzlENUQKUldSZG5VTjNnZGlhSmhURW4rVG5MQlhVejROZ1MrN0l1cG96cnBrMFdvVlVZTmlaRDZnak9TbjQK",
+      "endpoints": [
+        "https://github.com/BySzx/ilhabox-releases/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

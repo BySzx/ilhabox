@@ -1,0 +1,67 @@
+name: instalador-rapido
+
+# First install without the home PC: builds the phone app and the Windows installer and attaches
+# them to a release in this repo. No updater signature (that key lives on the home PC); updates
+# later come from BySzx/ilhabox-releases, built by release.yml.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build the phone app
+        working-directory: android
+        run: gradle --no-daemon assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
+  windows:
+    needs: android
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: apk
+      - name: Put the phone app inside the installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/resources | Out-Null
+          Copy-Item apk/app-release.apk src-tauri/resources/ilhabox.apk -Force
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: instalador-v__VERSION__
+          releaseName: 'IlhaBox v__VERSION__ (primeira instalação)'
+          releaseBody: 'Baixe o arquivo IlhaBox_..._x64-setup.exe abaixo e instale no PC do trabalho.'
+          releaseDraft: false
+          prerelease: false
