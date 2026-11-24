@@ -138,11 +138,11 @@ export function Ajustes(): JSX.Element {
         <section class="box">
           <h2>Apontamento de horas</h2>
           <label class="field">
-            Texto pro Movidesk
+            Texto pro Movidesk (um por período: apontamento pausado e continuado vira um texto pra cada pedaço)
             <textarea rows={3} class="mono" value={draft.modelo} onInput={(e) => edit(() => setDraft("modelo", e.currentTarget.value))} />
           </label>
           <span class="hint">
-            Campos: <code>{"{atividade}"}</code> (Ticket 48230 ou Reunião) <code>{"{tipo}"}</code> <code>{"{ticket}"}</code> <code>{"{descricao}"}</code> <code>{"{periodos}"}</code> (13:35–13:45, 14:31–14:50) <code>{"{inicio}"}</code> <code>{"{fim}"}</code> <code>{"{duracao}"}</code> (1h07){" "}
+            Campos: <code>{"{atividade}"}</code> (Ticket 48230 ou Reunião) <code>{"{tipo}"}</code> <code>{"{ticket}"}</code> <code>{"{descricao}"}</code> <code>{"{inicio}"}</code> <code>{"{fim}"}</code> <code>{"{duracao}"}</code> (1h07){" "}
             <code>{"{horas}"}</code> (01:07) <code>{"{data}"}</code>
           </span>
           <pre class="preview">{preview()}</pre>

@@ -2,7 +2,7 @@ import { Check, ChevronLeft, ChevronRight, ClipboardCopy, Pause, Pencil, Play, P
 import { createMemo, createSignal, For, Index, Show, type JSX } from "solid-js";
 import { cmd } from "../../lib/api";
 import {
-  byKind, clock, config, DAY, dayText, dur, entriesOf, entryText, hhmm, isPaused, isRunning, isTicket, kind, length, now, paused, periods,
+  byKind, clock, config, DAY, dayText, dur, entriesOf, hhmm, segText, isPaused, isRunning, isTicket, kind, length, now, paused, periods,
   running, startOfDay, tag, type Entry, type Seg,
 } from "../../lib/state";
 import { feedback, note } from "../ui";
@@ -10,9 +10,12 @@ import { feedback, note } from "../ui";
 const [day, setDay] = createSignal(startOfDay(Date.now()));
 const [editing, setEditing] = createSignal<Entry | null>(null);
 const [tipo, setTipo] = createSignal("Ticket");
+const [copying, setCopying] = createSignal<Entry | null>(null);
 
+/** One period goes straight to the clipboard; several open a list, one copy per period. */
 async function copyEntry(e: Entry): Promise<void> {
-  await cmd("copiar", { texto: entryText(e) });
+  if (e.segs.length > 1) return void setCopying(e);
+  await cmd("copiar", { texto: segText(e, e.segs[0]) });
   if (e.done && !e.sent) await cmd("work_sent", { ids: [e.id] });
   note("Copiado no PC: cole no Movidesk");
 }
@@ -193,6 +196,7 @@ export function Horas(): JSX.Element {
       </div>
 
       <Show when={editing()}>{(e) => <EditSheet entry={e()} close={() => setEditing(null)} />}</Show>
+      <Show when={copying()}>{(e) => <CopySheet entry={e()} close={() => setCopying(null)} />}</Show>
     </div>
   );
 }
@@ -286,6 +290,51 @@ function EditSheet(p: { entry: Entry; close: () => void }): JSX.Element {
           <button class="btn green" onClick={save}>
             <Check size={16} /> Salvar
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Each period is a separate Movidesk entry: copy one, paste it, come back for the next. */
+function CopySheet(p: { entry: Entry; close: () => void }): JSX.Element {
+  const e = p.entry;
+  const [done, setDone] = createSignal<number[]>([]);
+  const copy = async (i: number) => {
+    await cmd("copiar", { texto: segText(e, e.segs[i]) });
+    const next = done().includes(i) ? done() : [...done(), i];
+    setDone(next);
+    note(`${i + 1}º período copiado no PC`);
+    if (next.length === e.segs.length && e.done && !e.sent) await cmd("work_sent", { ids: [e.id] });
+  };
+  return (
+    <div class="sheet-bg" onClick={p.close}>
+      <div class="sheet" onClick={(ev) => ev.stopPropagation()}>
+        <div class="sheet-head">
+          <b>
+            Copiar {tag(e)} · {e.segs.length} períodos
+          </b>
+          <button class="icon" onClick={p.close} aria-label="Fechar">
+            <X size={20} />
+          </button>
+        </div>
+        <span class="dim small">Cada período é um apontamento no Movidesk: copie, cole lá e volte pro próximo.</span>
+        <div class="copy-list">
+          <Index each={e.segs}>
+            {(g, i) => (
+              <div class="copy-row" classList={{ ok: done().includes(i) }}>
+                <span class="mono">{i + 1}º</span>
+                <span class="mono grow">
+                  {hhmm(g().s)}–{g().e == null ? "agora" : hhmm(g().e!)} <span class="dim">({dur((g().e ?? Date.now()) - g().s)})</span>
+                </span>
+                <button class="btn sm" classList={{ green: !done().includes(i) }} onClick={() => void copy(i).catch(feedback)}>
+                  <Show when={done().includes(i)} fallback={<><ClipboardCopy size={15} /> Copiar</>}>
+                    <Check size={15} /> Copiado
+                  </Show>
+                </button>
+              </div>
+            )}
+          </Index>
         </div>
       </div>
     </div>

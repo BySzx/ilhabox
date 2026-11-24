@@ -297,3 +297,6 @@ input[type="time"] { font-family: var(--mono); }
 .seg-row input { width: 136px; height: 38px; }
 .now-tag { width: 136px; color: var(--red); font-weight: 700; font-size: 13px; padding-left: 4px; }
 .add-seg { align-self: flex-start; }
+.copy-list { display: flex; flex-direction: column; gap: 8px; }
+.copy-row { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); font-size: 16px; }
+.copy-row.ok { opacity: 0.6; }

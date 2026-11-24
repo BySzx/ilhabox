@@ -37,7 +37,7 @@ export function seed(f: Fire): void {
       { id: "encerrar", nome: "Encerramento", tipo: "texto", valor: "Ficou alguma dúvida?", colar: true, cor: "#a78bfa" },
       { id: "acesso", nome: "Acesso remoto", tipo: "programa", valor: "C:\\anydesk.exe", colar: false, cor: "#f472b6" },
     ],
-    modelo: "{periodos} ({duracao}) · {atividade}\n{descricao}",
+    modelo: "{inicio} às {fim} ({duracao}) · {atividade}\n{descricao}",
     tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"],
     metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
   };

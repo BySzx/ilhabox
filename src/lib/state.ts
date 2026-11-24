@@ -150,24 +150,30 @@ export const activity = (e: Entry): string => (isTicket(e) ? `Ticket${e.ticket ?
 /** Short label for pills and lists: "#48230" or "Reunião". */
 export const tag = (e: Entry): string => (isTicket(e) ? `#${e.ticket || "—"}` : kind(e));
 
-/** Movidesk text of one entry from the template in the settings. */
-export function entryText(e: Entry): string {
-  const end = lastEnd(e);
-  const total = length(e, Date.now());
-  const model = (config.modelo || "{periodos} ({duracao}) · {atividade}\n{descricao}").split("Ticket {ticket}").join("{atividade}");
+/**
+ * Movidesk text of one period of an entry (Movidesk takes each start/end separately), from the
+ * template in the settings. {periodos} is that period too.
+ */
+export function segText(e: Entry, g: Seg): string {
+  const end = g.e ?? Date.now();
+  const model = (config.modelo || "{inicio} às {fim} ({duracao}) · {atividade}\n{descricao}").split("Ticket {ticket}").join("{atividade}");
   return model
     .split("{atividade}").join(activity(e))
     .split("{tipo}").join(kind(e))
     .split("{ticket}").join(e.ticket || "")
     .split("{descricao}").join(e.desc || "")
-    .split("{periodos}").join(periods(e))
-    .split("{inicio}").join(hhmm(e.start))
+    .split("{periodos}").join(`${hhmm(g.s)}–${hhmm(end)}`)
+    .split("{inicio}").join(hhmm(g.s))
     .split("{fim}").join(hhmm(end))
-    .split("{duracao}").join(dur(total))
-    .split("{horas}").join(hhmmDur(total))
-    .split("{data}").join(ddmmyyyy(e.start))
+    .split("{duracao}").join(dur(end - g.s))
+    .split("{horas}").join(hhmmDur(end - g.s))
+    .split("{data}").join(ddmmyyyy(g.s))
     .trim();
 }
+
+/** One Movidesk text per period. */
+export const entryTexts = (e: Entry): string[] => e.segs.map((g) => segText(e, g));
+export const entryText = (e: Entry): string => entryTexts(e).join("\n\n");
 
 /** Time per kind of activity, biggest first. */
 export function byKind(list: Entry[], at = Date.now()): [string, number][] {
@@ -179,7 +185,10 @@ export function byKind(list: Entry[], at = Date.now()): [string, number][] {
 export function dayText(day: number): string {
   const list = entriesOf(day);
   const total = list.reduce((s, e) => s + length(e, Date.now()), 0);
-  const lines = list.map((e) => `• ${periods(e)} (${dur(length(e, Date.now()))}) ${activity(e)}${e.desc ? ` — ${e.desc}` : ""}${isPaused(e) ? " [em pausa]" : ""}`);
+  const lines = list
+    .flatMap((e) => e.segs.map((g) => ({ e, g })))
+    .sort((a, b) => a.g.s - b.g.s)
+    .map(({ e, g }) => `• ${hhmm(g.s)}–${hhmm(g.e ?? Date.now())} (${dur((g.e ?? Date.now()) - g.s)}) ${activity(e)}${e.desc ? ` — ${e.desc}` : ""}${g.e == null ? " [em andamento]" : ""}`);
   const kinds = byKind(list).map(([k, ms]) => `${k} ${dur(ms)}`).join(" · ");
   return [`Resumo de ${ddmmyyyy(day)}`, ...lines, `Total: ${dur(total)}${kinds ? ` (${kinds})` : ""}`].join("\n");
 }
