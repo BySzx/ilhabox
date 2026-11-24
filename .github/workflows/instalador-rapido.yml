@@ -3,9 +3,11 @@ name: instalador-rapido
 # First install without the home PC: builds the phone app and the Windows installer and attaches
 # them to a release in this repo. No updater signature (that key lives on the home PC); updates
 # later come from BySzx/ilhabox-releases, built by release.yml.
+# Runs when the version changes (tauri.conf.json), so each installer gets its own release.
 on:
   push:
     branches: [main]
+    paths: ['src-tauri/tauri.conf.json']
   workflow_dispatch:
 
 permissions:

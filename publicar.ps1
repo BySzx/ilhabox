@@ -58,6 +58,8 @@ if ($LASTEXITCODE -ne 0) {
   git fetch origin main 2>$null
   if ($LASTEXITCODE -eq 0) {
     git reset --soft origin/main
+    # Workflow files only exist in the repo (they can't be copied to this folder): keep them.
+    git checkout origin/main -- .github 2>$null
     git commit -m 'IlhaBox' 2>$null | Out-Null
   }
   git push -u origin main
