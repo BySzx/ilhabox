@@ -3,7 +3,9 @@
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use rusqlite::{params, types::ValueRef, Connection, OpenFlags};
-use serde::Serialize;
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fs, thread};
@@ -18,7 +20,7 @@ const HISTORY_MS: i64 = 24 * 3600 * 1000;
 const MAX_AVATAR: u64 = 1024 * 1024;
 const MAX_LIST: usize = 120;
 
-#[derive(Serialize, Clone)]
+#[derive(Clone, Serialize)]
 pub struct Msg {
     id: i64,
     at: i64,
@@ -224,7 +226,57 @@ fn fetch(c: &Connection, after: i64) -> rusqlite::Result<(Vec<Msg>, i64)> {
     Ok((out, last))
 }
 
-pub fn spawn() {
+/// Messages shown on the phone, and what the user cleared there (kept across restarts).
+static LIST: Mutex<Vec<Msg>> = Mutex::new(Vec::new());
+static CLEARED: Mutex<Option<(PathBuf, Cleared)>> = Mutex::new(None);
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+#[serde(default)]
+struct Cleared {
+    /// Everything up to this instant was cleared with "Limpar tudo".
+    all: i64,
+    /// Per chat: cleared up to this instant.
+    chats: HashMap<String, i64>,
+}
+
+fn visible(m: &Msg, c: &Cleared) -> bool {
+    m.at > c.all && m.at > c.chats.get(&m.chat).copied().unwrap_or(0)
+}
+
+fn publish(list: &[Msg]) {
+    crate::bus::send("whats-history", list, true);
+}
+
+/// Which of these notifications are still in the Action Center. WhatsApp removes a chat's
+/// notifications once it is opened on the PC, so a vanished id means the chat was read.
+fn alive(c: &Connection, ids: &[i64]) -> Vec<i64> {
+    let Ok(mut st) = c.prepare("SELECT 1 FROM Notification WHERE Id = ?1") else { return ids.to_vec() };
+    ids.iter().copied().filter(|id| st.exists(params![id]).unwrap_or(true)).collect()
+}
+
+/// Clears what the phone shows: one chat, or everything ("chat" empty). Stays cleared after a restart.
+pub fn clear(chat: &str) -> Result<serde_json::Value, String> {
+    let mut list = LIST.lock();
+    let mut g = CLEARED.lock();
+    let (path, c) = g.as_mut().ok_or("WhatsApp ainda não carregou")?;
+    let upto = list.iter().filter(|m| chat.is_empty() || m.chat == chat).map(|m| m.at).max().unwrap_or_else(now_ms);
+    if chat.is_empty() {
+        c.all = c.all.max(upto);
+        c.chats.clear();
+    } else {
+        c.chats.insert(chat.to_string(), upto);
+    }
+    let _ = serde_json::to_vec(&*c).map(|b| fs::write(&*path, b));
+    let c = c.clone();
+    list.retain(|m| visible(m, &c));
+    publish(&list);
+    Ok(serde_json::Value::Null)
+}
+
+pub fn spawn(dir: PathBuf) {
+    let file = dir.join("whats-limpo.json");
+    let cleared: Cleared = fs::read(&file).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    *CLEARED.lock() = Some((file, cleared));
     thread::Builder::new()
         .name("whats".into())
         .spawn(move || {
@@ -232,7 +284,6 @@ pub fn spawn() {
             let mut conn: Option<Connection> = None;
             let mut last_id = -1i64;
             let mut seen: Option<SystemTime> = None;
-            let mut list: Vec<Msg> = Vec::new();
             loop {
                 thread::sleep(Duration::from_millis(1200));
                 let s = stamp(&path);
@@ -243,35 +294,39 @@ pub fn spawn() {
                     conn = open(&path).ok();
                 }
                 let Some(c) = &conn else { continue };
+                let cleared = CLEARED.lock().as_ref().map(|(_, c)| c.clone()).unwrap_or_default();
+                let from = last_id.max(0);
+                let (news, last) = match fetch(c, from) {
+                    Ok(r) => r,
+                    Err(_) => {
+                        conn = None;
+                        continue;
+                    }
+                };
+                let mut list = LIST.lock();
+                let before = list.len();
                 if last_id < 0 {
-                    match fetch(c, 0) {
-                        Ok((all, last)) => {
-                            let cutoff = now_ms() - HISTORY_MS;
-                            list = all.into_iter().filter(|m| m.at >= cutoff).collect();
-                            let skip = list.len().saturating_sub(MAX_LIST);
-                            list.drain(..skip);
-                            crate::bus::send("whats-history", &list, true);
-                            last_id = last;
-                            seen = s;
-                        }
-                        Err(_) => conn = None,
+                    let cutoff = now_ms() - HISTORY_MS;
+                    *list = news.into_iter().filter(|m| m.at >= cutoff && visible(m, &cleared)).collect();
+                } else {
+                    for m in news.into_iter().filter(|m| visible(m, &cleared)) {
+                        crate::bus::send("whats", &m, false);
+                        list.push(m);
                     }
-                    continue;
                 }
-                match fetch(c, last_id) {
-                    Ok((news, last)) => {
-                        for m in news {
-                            crate::bus::send("whats", &m, false);
-                            list.push(m);
-                        }
-                        let skip = list.len().saturating_sub(MAX_LIST);
-                        list.drain(..skip);
-                        crate::bus::keep("whats-history", &list);
-                        last_id = last;
-                        seen = s;
-                    }
-                    Err(_) => conn = None,
+                // The database also changes when a notification is dismissed or its chat is read on the PC.
+                let ids: Vec<i64> = list.iter().map(|m| m.id).collect();
+                let live = alive(c, &ids);
+                list.retain(|m| live.contains(&m.id));
+                let skip = list.len().saturating_sub(MAX_LIST);
+                list.drain(..skip);
+                if last_id < 0 || list.len() != before {
+                    publish(&list);
+                } else {
+                    crate::bus::keep("whats-history", &*list);
                 }
+                last_id = last;
+                seen = s;
             }
         })
         .expect("whats thread");

@@ -192,10 +192,29 @@ input[type="time"] { font-family: var(--mono); }
 .chat-top { display: flex; justify-content: space-between; gap: 8px; }
 .chat-top b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-line { font-size: 13px; color: rgba(255, 255, 255, 0.72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-side { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.x { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; color: var(--dim); background: rgba(255, 255, 255, 0.06); }
+.x:active { background: rgba(248, 113, 113, 0.25); color: #fff; }
 .count { background: var(--green); color: #052e1f; font-size: 11px; font-weight: 800; border-radius: 99px; padding: 2px 7px; }
 
 /* ------------------------------------------------------------ atalhos */
-.shortcuts { height: 100%; overflow-y: auto; }
+.shortcuts { height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.sc-head { display: flex; align-items: baseline; gap: 12px; padding: 4px 4px 0; }
+.sc-head .btn.on { background: var(--green); color: #052e1f; }
+.tile { position: relative; }
+.tile.editing { outline: 2px dashed color-mix(in srgb, var(--c) 60%, transparent); outline-offset: -4px; }
+.edit-badge { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); color: #fff !important; }
+.tile.add { --c: #34d399; border-style: dashed; align-items: flex-start; }
+.sheet-grid.two { grid-template-columns: 1fr 1fr; }
+.field-like { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--dim); font-weight: 600; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { height: 36px; padding: 0 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.07); color: #fff; font-size: 13px; font-weight: 600; }
+.seg button.on { background: #fff; color: #000; }
+.sheet select { font: inherit; color: #fff; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); border-radius: 12px; height: 44px; padding: 0 12px; }
+.sheet select option { background: #15151b; }
+.swatches { display: flex; gap: 10px; }
+.swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent; }
+.swatch.on { border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25); }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
 .tile {
   --c: #fff; display: flex; flex-direction: column; gap: 6px; min-height: 120px; padding: 14px 16px; border-radius: 20px;

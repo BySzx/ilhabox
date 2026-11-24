@@ -1,8 +1,8 @@
-import { ExternalLink } from "lucide-solid";
+import { CheckCheck, ExternalLink, X } from "lucide-solid";
 import { createMemo, For, Show, type JSX } from "solid-js";
 import { cmd } from "../../lib/api";
 import { msgs, now, type WMsg } from "../../lib/state";
-import { feedback } from "../ui";
+import { feedback, note } from "../ui";
 import { ago, initials, tint } from "../whatsUi";
 
 type Chat = { name: string; last: WMsg; count: number; avatar: string | null; lines: string[] };
@@ -22,6 +22,8 @@ export function Whats(): JSX.Element {
     return [...map.values()].sort((a, b) => b.last.at - a.last.at);
   });
   const open = () => void cmd("whats_abrir").catch(feedback);
+  const clear = (chat = "") =>
+    void cmd("whats_limpar", { chat }).then(() => note(chat ? `${chat} limpo` : "Mensagens limpas"), feedback);
 
   return (
     <div class="whats">
@@ -29,6 +31,9 @@ export function Whats(): JSX.Element {
         <b>WhatsApp da empresa</b>
         <span class="dim">últimas 24 h · {msgs().length} mensagens</span>
         <span class="grow" />
+        <button class="btn ghost sm" disabled={!msgs().length} onClick={() => clear()}>
+          <CheckCheck size={15} /> Limpar tudo
+        </button>
         <button class="btn ghost sm" onClick={open}>
           <ExternalLink size={15} /> Abrir no PC
         </button>
@@ -49,9 +54,22 @@ export function Whats(): JSX.Element {
                 </span>
                 <For each={c.lines}>{(l) => <span class="chat-line">{l}</span>}</For>
               </span>
-              <Show when={c.count > 1}>
-                <span class="count mono">{c.count}</span>
-              </Show>
+              <span class="chat-side">
+                <span
+                  class="x"
+                  role="button"
+                  aria-label={`Limpar ${c.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clear(c.name);
+                  }}
+                >
+                  <X size={16} />
+                </span>
+                <Show when={c.count > 1}>
+                  <span class="count mono">{c.count}</span>
+                </Show>
+              </span>
             </button>
           )}
         </For>

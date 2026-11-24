@@ -54,6 +54,7 @@ pub fn run(app: &AppHandle, name: &str, args: Value) -> Result<Value, String> {
         "copiar" => pc::set_clipboard(&str_arg(&args, "texto")).map(|_| Value::Null),
         "atalho" => atalho(&str_arg(&args, "id")),
         "whats_abrir" => Ok(json!(whats::focus())),
+        "whats_limpar" => whats::clear(&str_arg(&args, "chat")),
         "abrir_easypac" => {
             let pkg = crate::bus::get("phone").and_then(|p| p["easypac"].as_str().map(str::to_string)).unwrap_or_default();
             if pkg.is_empty() { Err("não achei o app da EasyPac no celular (defina o pacote nos ajustes)".into()) } else { open_phone_app(&pkg) }

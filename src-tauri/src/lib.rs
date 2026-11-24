@@ -102,7 +102,7 @@ pub fn run() {
             work::init(dir.clone());
             server::spawn(app.handle().clone(), key.clone());
             media::spawn();
-            whats::spawn();
+            whats::spawn(dir.clone());
             adb::spawn(app.handle().clone(), key);
             mouse::spawn(&config::get().mouse_lado);
             update::spawn(app.handle().clone());

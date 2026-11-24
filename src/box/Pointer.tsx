@@ -12,7 +12,9 @@ type Ev =
 
 const ORDER = ["inicio", "horas", "musica", "whats", "atalhos"];
 const editable = (el: Element | null): el is HTMLInputElement | HTMLTextAreaElement =>
-  !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA") && !(el as HTMLInputElement).disabled;
+  !!el &&
+  (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !["checkbox", "radio", "color", "button", "submit"].includes((el as HTMLInputElement).type))) &&
+  !(el as HTMLInputElement).disabled;
 
 function scrollable(el: Element | null): HTMLElement | null {
   for (let e = el as HTMLElement | null; e; e = e.parentElement) {
