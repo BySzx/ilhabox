@@ -38,6 +38,46 @@ const level = (grau: string) => (grau === "Grande perigo" ? "red" : grau === "Pe
 const day = (t: number) => new Date(t).toLocaleString("pt-BR", { weekday: "short", hour: "2-digit", minute: "2-digit" });
 const hour = (t: number) => new Date(t).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
+const RANK = ["Perigo potencial", "Perigo", "Grande perigo"];
+type Aviso = { evento: string; grau: string; ate: number | null; texto: string };
+
+/** Closed warnings, per phone; one comes back only if it gets worse or is extended. */
+const readClosed = (): string[] => {
+  try {
+    return JSON.parse(localStorage.getItem("avisos-fechados") ?? "[]") as string[];
+  } catch {
+    return [];
+  }
+};
+const [closed, setClosed] = createSignal<string[]>(readClosed());
+const keyOf = (a: Aviso) => `${a.evento}|${a.grau}|${a.ate ?? ""}`;
+function closeAviso(a: Aviso): void {
+  const l = [...closed(), keyOf(a)].slice(-60);
+  setClosed(l);
+  try {
+    localStorage.setItem("avisos-fechados", JSON.stringify(l));
+  } catch {
+    /* only for this session */
+  }
+}
+
+/** One line per kind of warning (the INMET repeats the same event for each area and day), worst first, closed ones out. */
+const avisos = (): Aviso[] => {
+  const seen = new Map<string, Aviso>();
+  for (const a of clima()?.alertas ?? []) {
+    const cur = seen.get(a.evento);
+    const worse = !cur || RANK.indexOf(a.grau) > RANK.indexOf(cur.grau) || (a.grau === cur.grau && (a.ate ?? 0) > (cur.ate ?? 0));
+    if (worse) seen.set(a.evento, a);
+  }
+  return [...seen.values()].filter((a) => !closed().includes(keyOf(a))).sort((a, b) => RANK.indexOf(b.grau) - RANK.indexOf(a.grau));
+};
+
+/** Worst open warning when it is orange or red; yellow ones are almost always on somewhere, so they stay in the details. */
+const serious = () => {
+  const worst = avisos()[0]?.grau;
+  return worst && worst !== "Perigo potencial" ? worst : null;
+};
+
 /** Small block for the clock card; a tap opens the details. */
 export function ClimaMini(): JSX.Element {
   const [open, setOpen] = createSignal(false);
@@ -46,7 +86,10 @@ export function ClimaMini(): JSX.Element {
       <button class="wx-mini" onClick={() => setOpen(true)}>
         <Show when={clima()?.temp != null} fallback={<span class="dim wx-wait">{clima()?.erro ? "clima indisponível · toque" : `${clima()?.buscando ?? "buscando clima"}…`}</span>}>
           <div class="wx-now">
-            <CondIcon cond={clima()?.cond} dia={clima()?.dia} size={34} />
+            <span class="wx-icon">
+              <CondIcon cond={clima()?.cond} dia={clima()?.dia} size={34} />
+              <Show when={serious()}>{(g) => <i class={`wx-dot ${level(g())}`} />}</Show>
+            </span>
             <b class="mono">{deg(clima()?.temp)}</b>
           </div>
           <span class="wx-range mono">
@@ -55,11 +98,6 @@ export function ClimaMini(): JSX.Element {
           <span class="wx-rain-line">
             <Droplets size={13} /> {clima()?.chuva ?? 0}%
           </span>
-          <Show when={clima()?.alertas?.length}>
-            <span class={`wx-warn ${level(clima()!.alertas![0].grau)}`}>
-              <TriangleAlert size={12} /> {clima()!.alertas![0].evento}
-            </span>
-          </Show>
         </Show>
       </button>
       <Show when={open()}>
@@ -76,6 +114,7 @@ function ClimaSheet(p: { close: () => void }): JSX.Element {
     const d = c().diferenca ?? 0;
     return d <= 1.5 ? "concordam" : d <= 3 ? "divergem um pouco" : "divergem bastante";
   };
+  const [aberto, setAberto] = createSignal(false);
   const radar = (qual: string) => void cmd("clima_radar", { qual }).then(() => note("Abrindo o radar no PC"), feedback);
   const refresh = () => void cmd("clima_atualizar").then(() => note("Atualizando o clima…"), feedback);
 
@@ -95,20 +134,6 @@ function ClimaSheet(p: { close: () => void }): JSX.Element {
             <X size={20} />
           </button>
         </div>
-        <For each={c().alertas ?? []}>
-          {(a) => (
-            <div class={`wx-alert ${level(a.grau)}`}>
-              <TriangleAlert size={18} />
-              <div>
-                <b>
-                  {a.evento} · {a.grau}
-                  {a.ate ? ` · até ${day(a.ate)}` : ""}
-                </b>
-                <span>{a.texto}</span>
-              </div>
-            </div>
-          )}
-        </For>
         <Show when={c().temp != null} fallback={<p class="dim">{c().erro ?? `${c().buscando ?? "Buscando"}…`}</p>}>
           <div class="wx-main">
             <CondIcon cond={c().cond} dia={c().dia} size={56} />
@@ -142,6 +167,37 @@ function ClimaSheet(p: { close: () => void }): JSX.Element {
               )}
             </For>
           </div>
+          <Show when={avisos().length}>
+            <div class="wx-alerts">
+              <div class="wx-alerts-head">
+                <button class="wx-alerts-toggle" onClick={() => setAberto((v) => !v)}>
+                  <TriangleAlert size={14} class={`wx-tri ${level(avisos()[0].grau)}`} />
+                  {avisos().length === 1 ? "Aviso do INMET" : `${avisos().length} avisos do INMET`}
+                  <span class="dim">· {avisos().map((a) => a.evento.toLowerCase()).join(", ")}</span>
+                  <span class="dim">{aberto() ? "▴" : "▾"}</span>
+                </button>
+                <button class="icon sm" onClick={() => avisos().forEach(closeAviso)} aria-label="Fechar os avisos">
+                  <X size={16} />
+                </button>
+              </div>
+              <Show when={aberto()}>
+                <For each={avisos()}>
+                  {(a) => (
+                    <div class="wx-alert">
+                      <b class={level(a.grau)}>
+                        {a.evento} · {a.grau}
+                        {a.ate ? ` · até ${day(a.ate)}` : ""}
+                      </b>
+                      <button class="icon sm" onClick={() => closeAviso(a)} aria-label="Fechar este aviso">
+                        <X size={14} />
+                      </button>
+                      <span>{a.texto}</span>
+                    </div>
+                  )}
+                </For>
+              </Show>
+            </div>
+          </Show>
           <div class="wx-sources">
             <span class="dim">
               {(c().fontes ?? []).filter((f) => f.ok).length} de {(c().fontes ?? []).length} fontes responderam · modelos {trust()} (diferença de {c().diferenca}°)

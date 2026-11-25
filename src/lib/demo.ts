@@ -74,7 +74,11 @@ export function seed(f: Fire): void {
     horas: Array.from({ length: 12 }, (_, k) => ({ t: h0 + k * 3_600_000, temp: Math.round((27 - Math.abs(k - 2) * 0.8) * 10) / 10, mm: k === 3 || k === 4 ? 1.2 : 0 })),
     previsto: 26.6,
     medido: { estacao: "CIDADE EXEMPLO", km: 6, temp: 26.5, em: h0 - 3_600_000 },
-    alertas: [{ evento: "Tempestade", grau: "Perigo potencial", ate: h0 + 10 * 3_600_000, texto: "Chuva entre 20 e 30 mm/h ou até 50 mm/dia, ventos intensos (40-60 km/h) e queda de granizo." }],
+    alertas: [
+      { evento: "Tempestade", grau: "Perigo potencial", ate: h0 + 10 * 3_600_000, texto: "Chuva entre 20 e 30 mm/h ou até 50 mm/dia, ventos intensos (40-60 km/h) e queda de granizo." },
+      { evento: "Tempestade", grau: "Perigo potencial", ate: h0 + 6 * 3_600_000, texto: "Chuva entre 20 e 30 mm/h." },
+      { evento: "Acumulado de Chuva", grau: "Perigo", ate: h0 + 20 * 3_600_000, texto: "Chuva entre 50 e 100 mm/dia." },
+    ],
     fontes: [
       { nome: "ECMWF", ok: true, temp: 26.5, cond: "parcial" }, { nome: "NOAA GFS", ok: true, temp: 27.5, cond: "chuva" }, { nome: "DWD ICON", ok: true, temp: 25.7, cond: "parcial" },
       { nome: "MET Norway", ok: true, temp: 26.3, cond: "nublado" }, { nome: "wttr.in", ok: false }, { nome: "CPTEC/INPE", ok: true, min: 19, max: 29 },
@@ -131,7 +135,7 @@ export function demoCmd(name: string, args: Record<string, unknown>): unknown {
     config = args as unknown as Config;
     fire("config", config);
   } else if (name === "lyrics") {
-    return Array.from({ length: 12 }, (_, i) => `[00:${String(40 + i * 4).padStart(2, "0")}.00]Linha ${i + 1} da letra de exemplo`).join("\n");
+    return { synced: Array.from({ length: 12 }, (_, i) => `[00:${String(40 + i * 4).padStart(2, "0")}.00]Linha ${i + 1} da letra de exemplo`).join("\n") };
   }
   entries = entries.map(refresh);
   publish();

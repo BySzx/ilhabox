@@ -1,7 +1,7 @@
 //! Synced lyrics from lrclib.net (free, no key), same rules as the Ilha.
 
 use reqwest::Client;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::sync::OnceLock;
 
 fn http() -> &'static Client {
@@ -23,10 +23,11 @@ fn same_song(v: &Value, artist: &str, title: &str, duration_s: u64) -> bool {
 }
 
 
-pub async fn lyrics(artist: &str, title: &str, album: &str, duration_s: u64) -> Option<String> {
+/// Synced lyrics when there are any, else the plain text; Err only when lrclib could not be reached.
+pub async fn lyrics(artist: &str, title: &str, album: &str, duration_s: u64) -> Result<Value, String> {
     // No artist = not a song (a WhatsApp voice note, a video): searching would grab random lyrics.
     if artist.trim().is_empty() || title.trim().is_empty() {
-        return None;
+        return Ok(json!({}));
     }
     let mut q = vec![("artist_name", artist.to_string()), ("track_name", title.to_string())];
     if !album.is_empty() {
@@ -35,24 +36,44 @@ pub async fn lyrics(artist: &str, title: &str, album: &str, duration_s: u64) -> 
     if duration_s > 0 {
         q.push(("duration", duration_s.to_string()));
     }
-    if let Ok(r) = http().get("https://lrclib.net/api/get").query(&q).send().await {
-        if let Ok(v) = r.json::<Value>().await {
-            if let Some(s) = v["syncedLyrics"].as_str().filter(|s| !s.is_empty()) {
-                return Some(s.into());
+    let mut erro = None;
+    let mut plain = None;
+    match http().get("https://lrclib.net/api/get").query(&q).send().await {
+        Ok(r) => {
+            if let Ok(v) = r.json::<Value>().await {
+                if let Some(s) = v["syncedLyrics"].as_str().filter(|s| !s.is_empty()) {
+                    return Ok(json!({ "synced": s }));
+                }
+                plain = v["plainLyrics"].as_str().filter(|s| !s.is_empty()).map(String::from);
             }
         }
+        Err(e) => erro = Some(e),
     }
-    let list: Value = http()
-        .get("https://lrclib.net/api/search")
-        .query(&[("artist_name", artist), ("track_name", title)])
-        .send()
-        .await
-        .ok()?
-        .json()
-        .await
-        .ok()?;
-    list.as_array()?
-        .iter()
-        .filter(|v| same_song(v, artist, title, duration_s))
-        .find_map(|v| v["syncedLyrics"].as_str().filter(|s| !s.is_empty()).map(String::from))
+    let searches = [
+        vec![("artist_name", artist.to_string()), ("track_name", title.to_string())],
+        vec![("q", format!("{artist} {title}"))],
+    ];
+    for q in searches {
+        let list = match http().get("https://lrclib.net/api/search").query(&q).send().await {
+            Ok(r) => r.json::<Value>().await.unwrap_or(Value::Null),
+            Err(e) => {
+                erro = Some(e);
+                continue;
+            }
+        };
+        let hits: Vec<&Value> = list.as_array().map(|l| l.iter().filter(|v| same_song(v, artist, title, duration_s)).collect()).unwrap_or_default();
+        if let Some(s) = hits.iter().find_map(|v| v["syncedLyrics"].as_str().filter(|s| !s.is_empty())) {
+            return Ok(json!({ "synced": s }));
+        }
+        plain = plain.or_else(|| hits.iter().find_map(|v| v["plainLyrics"].as_str().filter(|s| !s.is_empty()).map(String::from)));
+        erro = None;
+    }
+    match (plain, erro) {
+        (Some(p), _) => Ok(json!({ "plain": p })),
+        (None, Some(e)) => {
+            crate::diag::log(&format!("letra: lrclib sem resposta: {e}"));
+            Err(format!("o site das letras (lrclib.net) não respondeu: {}", if e.is_timeout() { "demorou demais".to_string() } else if e.is_connect() { "sem conexão, a rede pode estar bloqueando".to_string() } else { e.to_string() }))
+        }
+        (None, None) => Ok(json!({})),
+    }
 }

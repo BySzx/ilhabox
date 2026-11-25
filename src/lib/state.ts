@@ -37,6 +37,8 @@ export const [media, setMedia] = createStore<Media>({
 export const [art, setArt] = createSignal<string | null>(null);
 export const [artColor, setArtColor] = createSignal<RGB>(QUIET);
 export const [lyrics, setLyrics] = createSignal<Line[]>([]);
+/** Why there are no lyrics, when there are none. */
+export const [lyricsNote, setLyricsNote] = createSignal("");
 export const [now, setNow] = createSignal(Date.now());
 
 export function position(at = now()): number {
@@ -50,11 +52,23 @@ async function loadLyrics(): Promise<void> {
   if (k === lyricKey || !media.title) return;
   lyricKey = k;
   setLyrics([]);
-  if (!media.artist.trim() || /whatsapp/i.test(media.app)) return;
-  const lrc = await cmd<string | null>("lyrics", {
-    artist: media.artist, title: media.title, album: media.album, durationS: Math.round(media.durationMs / 1000),
-  }).catch(() => null);
-  if (lrc && k === `${media.title}\u0001${media.artist}`) setLyrics(parseLrc(lrc));
+  setLyricsNote("");
+  if (!media.artist.trim() || /whatsapp/i.test(media.app)) return void setLyricsNote("Sem letra para este áudio");
+  const same = () => k === `${media.title}\u0001${media.artist}`;
+  try {
+    const r = await cmd<{ synced?: string; plain?: string }>("lyrics", {
+      artist: media.artist, title: media.title, album: media.album, durationS: Math.round(media.durationMs / 1000),
+    });
+    if (!same()) return;
+    if (r.synced) setLyrics(parseLrc(r.synced));
+    else if (r.plain) setLyrics(r.plain.split(/\r?\n/).map((text) => ({ t: -1, text })));
+    else setLyricsNote("Essa música não tem letra no lrclib.net");
+  } catch (e) {
+    if (!same()) return;
+    setLyricsNote(e instanceof Error ? e.message : "Não consegui buscar a letra");
+    lyricKey = "";
+    window.setTimeout(() => void loadLyrics(), 30_000);
+  }
 }
 
 export function control(action: "toggle" | "next" | "prev"): void {

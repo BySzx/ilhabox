@@ -59,7 +59,7 @@ pub fn run(app: &AppHandle, name: &str, args: Value) -> Result<Value, String> {
         "lyrics" => {
             let (artist, title, album) = (str_arg(&args, "artist"), str_arg(&args, "title"), str_arg(&args, "album"));
             let dur = args.get("durationS").and_then(Value::as_u64).unwrap_or(0);
-            Ok(json!(tauri::async_runtime::block_on(lyrics::lyrics(&artist, &title, &album, dur))))
+            tauri::async_runtime::block_on(lyrics::lyrics(&artist, &title, &album, dur))
         }
         "work_start" => work::start(&args),
         "work_stop" | "work_finish" => work::finish(&args),
