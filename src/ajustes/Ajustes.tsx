@@ -1,8 +1,8 @@
-import { ArrowDown, ArrowUp, Check, Monitor, Plus, Smartphone, Trash2 } from "lucide-solid";
+import { ArrowDown, ArrowUp, Check, MapPin, Monitor, Plus, Search, Smartphone, Trash2 } from "lucide-solid";
 import { createEffect, createSignal, For, on, onMount, Show, type JSX } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import { cmd, online } from "../lib/api";
-import { config, entryText, phoneState, update, type Atalho, type Config } from "../lib/state";
+import { clima, config, entryText, phoneState, update, type Atalho, type Config } from "../lib/state";
 
 const STATUS: Record<string, string> = {
   conectado: "Conectado",
@@ -56,6 +56,18 @@ export function Ajustes(): JSX.Element {
   };
   const addAtalho = () =>
     edit(() => setDraft("atalhos", (l) => [...l, { id: `a${Date.now().toString(36)}`, nome: "Novo atalho", tipo: "texto", valor: "", colar: true, cor: "#60a5fa" }]));
+  const [busca, setBusca] = createSignal("");
+  const [achados, setAchados] = createSignal<{ nome: string; lat: number; lon: number }[]>([]);
+  const buscar = () => {
+    if (!busca().trim()) return;
+    void cmd<{ nome: string; lat: number; lon: number }[]>("clima_buscar", { texto: busca().trim() }).then(
+      (l) => {
+        setAchados(l);
+        if (!l.length) setSaved("Nenhum lugar com esse nome");
+      },
+      (e: Error) => setSaved(e.message),
+    );
+  };
   const move = (i: number, d: number) =>
     edit(() =>
       setDraft("atalhos", (l) => {
@@ -324,6 +336,42 @@ export function Ajustes(): JSX.Element {
               </div>
             )}
           </For>
+        </section>
+
+        <section class="box">
+          <h2>Clima da tela inicial</h2>
+          <span class="hint">
+            <MapPin size={13} /> {draft.climaLat != null ? `${draft.climaNome} (escolhido)` : `Automático: localização do Windows, senão pela internet${clima()?.local ? ` · agora em ${clima()?.local}` : ""}`}
+          </span>
+          <div class="row">
+            <label class="field">
+              Cidade ou bairro
+              <input value={busca()} placeholder="ex.: Campinas" onInput={(e) => setBusca(e.currentTarget.value)} onKeyDown={(e) => e.key === "Enter" && buscar()} />
+            </label>
+            <button class="btn" onClick={buscar}>
+              <Search size={15} /> Buscar
+            </button>
+            <Show when={draft.climaLat != null}>
+              <button class="btn ghost" onClick={() => edit(() => setDraft({ climaLat: null, climaLon: null, climaNome: "" }))}>
+                Usar automático
+              </button>
+            </Show>
+          </div>
+          <div class="places">
+            <For each={achados()}>
+              {(l) => (
+                <button
+                  class="btn ghost sm"
+                  onClick={() => {
+                    edit(() => setDraft({ climaLat: l.lat, climaLon: l.lon, climaNome: l.nome }));
+                    setAchados([]);
+                  }}
+                >
+                  {l.nome}
+                </button>
+              )}
+            </For>
+          </div>
         </section>
 
         <section class="box">

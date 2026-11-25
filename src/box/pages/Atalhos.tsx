@@ -1,8 +1,8 @@
-import { Check, ChevronLeft, ChevronRight, ClipboardCopy, Globe, House, MessageCircle, Pencil, Plus, Power, Rocket, Smartphone, Trash2, Type, X } from "lucide-solid";
-import { createSignal, For, Show, type JSX } from "solid-js";
+import { Check, ClipboardCopy, Eye, EyeOff, Globe, House, MessageCircle, Pencil, Plus, Power, Rocket, Smartphone, Trash2, Type, X } from "lucide-solid";
+import { createMemo, createSignal, For, Show, type JSX } from "solid-js";
 import { unwrap } from "solid-js/store";
 import { cmd, phone } from "../../lib/api";
-import { appName, config, dayText, phoneState, startOfDay, type Atalho } from "../../lib/state";
+import { appName, config, dayText, phoneState, startOfDay, type Atalho, type Config } from "../../lib/state";
 import { feedback, note } from "../ui";
 
 const ICON: Record<Atalho["tipo"], (p: { size: number }) => JSX.Element> = {
@@ -34,13 +34,36 @@ function run(a: Atalho): void {
     .catch(feedback);
 }
 
-/** Saves the whole shortcut list (the rest of the settings go back unchanged). */
-async function saveList(atalhos: Atalho[]): Promise<void> {
-  await cmd("config_set", { ...structuredClone(unwrap(config)), atalhos });
+/** Saves part of the settings (the rest goes back unchanged). */
+async function saveConfig(patch: Partial<Config>): Promise<void> {
+  await cmd("config_set", { ...structuredClone(unwrap(config)), ...patch });
+}
+
+const saveList = (atalhos: Atalho[]) => saveConfig({ atalhos });
+
+type Tile = {
+  id: string;
+  icon: (p: { size: number }) => JSX.Element;
+  title: string;
+  sub: string;
+  cls: string;
+  color?: string;
+  run?: () => void;
+  index?: number;
+};
+
+/** Tile ids in the user's order: known ones first as arranged, new ones after in their natural order. */
+function arrange(tiles: Tile[], order: string[]): Tile[] {
+  const pos = (id: string) => {
+    const i = order.indexOf(id);
+    return i < 0 ? order.length : i;
+  };
+  return tiles.map((t, i) => ({ t, i })).sort((a, b) => pos(a.t.id) - pos(b.t.id) || a.i - b.i).map((x) => x.t);
 }
 
 export function Atalhos(): JSX.Element {
   const [editing, setEditing] = createSignal(false);
+  const [picked, setPicked] = createSignal<string | null>(null);
   const [sheet, setSheet] = createSignal<{ a: Atalho; index: number } | null>(null);
   const home = () => (phone ? phone.home() : void cmd("celular_home").catch(feedback));
   // Two taps: the first arms it for 3 s, the second shuts the PC down (a brush of the finger never does).
@@ -58,84 +81,147 @@ export function Atalhos(): JSX.Element {
   };
   const fresh = (): Atalho => ({ id: `a${Date.now().toString(36)}`, nome: "", tipo: "texto", valor: "", colar: true, cor: CORES[config.atalhos.length % CORES.length] });
 
+  const tiles = createMemo((): Tile[] => {
+    const pkgs = phoneState().easypacs;
+    const easypac: Tile[] = pkgs.length
+      ? pkgs.map((pkg) => ({
+          id: `sys:easypac:${pkg}`,
+          icon: Smartphone,
+          title: appName(pkg),
+          sub: pkg,
+          cls: "sys easypac",
+          run: () => void cmd("abrir_celular_app", { pacote: pkg }).then(() => note(`Abrindo ${appName(pkg)}`), feedback),
+        }))
+      : [{ id: "sys:easypac", icon: Smartphone, title: "EasyPac", sub: "nenhum app EasyPac achado no celular", cls: "sys easypac off" }];
+    const system: Tile[] = [
+      ...easypac,
+      { id: "sys:celular", icon: House, title: "Celular normal", sub: "volta quando replugar ou tocar no ícone", cls: "sys", run: home },
+      { id: "sys:whats", icon: MessageCircle, title: "WhatsApp no PC", sub: "traz a janela pra frente", cls: "sys", run: () => void cmd("whats_abrir").catch(feedback) },
+      {
+        id: "sys:desligar",
+        icon: Power,
+        title: armed() ? "Toque de novo" : "Desligar PC",
+        sub: armed() ? "pra desligar agora" : "pausa o apontamento e desliga",
+        cls: armed() ? "sys power armed" : "sys power",
+        run: shutdown,
+      },
+      {
+        id: "sys:resumo",
+        icon: ClipboardCopy,
+        title: "Resumo do dia",
+        sub: "copia no PC",
+        cls: "sys",
+        run: () => void cmd("copiar", { texto: dayText(startOfDay(Date.now())) }).then(() => note("Resumo do dia copiado no PC"), feedback),
+      },
+    ];
+    const own: Tile[] = config.atalhos.map((a, index) => ({
+      id: a.id,
+      icon: ICON[a.tipo] ?? Type,
+      title: a.nome || "Sem nome",
+      sub: a.tipo === "texto" ? a.valor : a.valor.replace(/^https?:\/\//, ""),
+      cls: "",
+      color: a.cor || "#60a5fa",
+      run: () => run(a),
+      index,
+    }));
+    return arrange([...system, ...own], config.atalhosOrdem);
+  });
+  const hidden = (id: string) => config.atalhosOcultos.includes(id);
+  const shown = () => (editing() ? tiles() : tiles().filter((t) => !hidden(t.id)));
+
+  /** Edit mode: the first tap picks a tile up, the second puts it in the place of the one tapped. */
+  const tap = (t: Tile) => {
+    const from = picked();
+    if (!from) return setPicked(t.id);
+    setPicked(null);
+    if (from === t.id) return;
+    const ids = tiles().map((x) => x.id);
+    ids.splice(ids.indexOf(from), 1);
+    ids.splice(tiles().findIndex((x) => x.id === t.id), 0, from);
+    void saveConfig({ atalhosOrdem: ids }).catch(feedback);
+  };
+  const toggleHidden = (id: string) => {
+    const l = hidden(id) ? config.atalhosOcultos.filter((x) => x !== id) : [...config.atalhosOcultos, id];
+    void saveConfig({ atalhosOcultos: l }).catch(feedback);
+  };
+  const edit = (t: Tile) => t.index != null && setSheet({ a: { ...config.atalhos[t.index] }, index: t.index });
+
   return (
     <div class="shortcuts">
       <div class="sc-head">
         <b>Atalhos</b>
-        <span class="dim">{editing() ? "toque num atalho para editar" : "toque para usar no PC"}</span>
+        <span class="dim">{editing() ? (picked() ? "agora toque no lugar para onde ele vai" : "toque num atalho para mudar de lugar") : "toque para usar no PC"}</span>
         <span class="grow" />
-        <button class="btn ghost sm" classList={{ on: editing() }} onClick={() => setEditing((v) => !v)}>
-          <Show when={editing()} fallback={<><Pencil size={15} /> Editar</>}>
+        <Show when={editing() && config.atalhosOrdem.length}>
+          <button class="btn ghost sm" onClick={() => void saveConfig({ atalhosOrdem: [], atalhosOcultos: [] }).catch(feedback)}>
+            Ordem original
+          </button>
+        </Show>
+        <button
+          class="btn ghost sm"
+          classList={{ on: editing() }}
+          onClick={() => {
+            setPicked(null);
+            setEditing((v) => !v);
+          }}
+        >
+          <Show when={editing()} fallback={<><Pencil size={15} /> Organizar</>}>
             <Check size={15} /> Pronto
           </Show>
         </button>
       </div>
-      <div class="tiles">
-        <Show when={!editing()}>
-          <For
-            each={phoneState().easypacs}
-            fallback={
-              <div class="tile sys easypac off">
-                <Smartphone size={26} />
-                <b>EasyPac</b>
-                <span>nenhum app EasyPac achado no celular</span>
-              </div>
-            }
-          >
-            {(pkg) => (
-              <button class="tile sys easypac" onClick={() => void cmd("abrir_celular_app", { pacote: pkg }).then(() => note(`Abrindo ${appName(pkg)}`), feedback)}>
-                <Smartphone size={26} />
-                <b>{appName(pkg)}</b>
-                <span>{pkg}</span>
-              </button>
-            )}
-          </For>
-          <button class="tile sys" onClick={home}>
-            <House size={26} />
-            <b>Celular normal</b>
-            <span>volta quando replugar ou tocar no ícone</span>
-          </button>
-          <button class="tile sys" onClick={() => void cmd("whats_abrir").catch(feedback)}>
-            <MessageCircle size={26} />
-            <b>WhatsApp no PC</b>
-            <span>traz a janela pra frente</span>
-          </button>
-          <button class="tile sys power" classList={{ armed: armed() }} onClick={shutdown}>
-            <Power size={26} />
-            <b>{armed() ? "Toque de novo" : "Desligar PC"}</b>
-            <span>{armed() ? "pra desligar agora" : "pausa o apontamento e desliga"}</span>
-          </button>
-          <button class="tile sys" onClick={() => void cmd("copiar", { texto: dayText(startOfDay(Date.now())) }).then(() => note("Resumo do dia copiado no PC"), feedback)}>
-            <ClipboardCopy size={26} />
-            <b>Resumo do dia</b>
-            <span>copia no PC</span>
-          </button>
-        </Show>
-        <For each={config.atalhos}>
-          {(a, i) => {
-            const Icon = ICON[a.tipo] ?? Type;
-            return (
-              <button
-                class="tile"
-                classList={{ editing: editing() }}
-                style={{ "--c": a.cor || "#60a5fa" }}
-                onClick={() => (editing() ? setSheet({ a: { ...a }, index: i() }) : run(a))}
-                onContextMenu={(ev) => {
-                  ev.preventDefault();
-                  setSheet({ a: { ...a }, index: i() });
-                }}
-              >
-                <Icon size={24} />
-                <Show when={editing()}>
-                  <span class="edit-badge">
-                    <Pencil size={13} />
-                  </span>
-                </Show>
-                <b>{a.nome || "Sem nome"}</b>
-                <span>{a.tipo === "texto" ? a.valor : a.valor.replace(/^https?:\/\//, "")}</span>
-              </button>
-            );
-          }}
+      <div class="tiles" classList={{ arranging: editing() }}>
+        <For each={shown()}>
+          {(t) => (
+            <button
+              class={`tile ${t.cls}`}
+              classList={{ editing: editing(), picked: picked() === t.id, hidden: hidden(t.id), target: !!picked() && picked() !== t.id }}
+              style={t.color ? { "--c": t.color } : undefined}
+              onClick={() => (editing() ? tap(t) : t.run?.())}
+              onContextMenu={(ev) => {
+                ev.preventDefault();
+                edit(t);
+              }}
+            >
+              <t.icon size={t.index != null ? 24 : 26} />
+              <Show when={editing()}>
+                <span class="tile-tools">
+                  <Show
+                    when={t.index != null}
+                    fallback={
+                      <span
+                        class="edit-badge"
+                        role="button"
+                        aria-label={hidden(t.id) ? "Mostrar" : "Esconder"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleHidden(t.id);
+                        }}
+                      >
+                        <Show when={hidden(t.id)} fallback={<Eye size={13} />}>
+                          <EyeOff size={13} />
+                        </Show>
+                      </span>
+                    }
+                  >
+                    <span
+                      class="edit-badge"
+                      role="button"
+                      aria-label="Editar"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        edit(t);
+                      }}
+                    >
+                      <Pencil size={13} />
+                    </span>
+                  </Show>
+                </span>
+              </Show>
+              <b>{t.title}</b>
+              <span>{hidden(t.id) && editing() ? "escondido" : t.sub}</span>
+            </button>
+          )}
         </For>
         <Show when={editing()}>
           <button class="tile add" onClick={() => setSheet({ a: fresh(), index: -1 })}>
@@ -172,13 +258,6 @@ function AtalhoSheet(p: { a: Atalho; index: number; close: () => void }): JSX.El
       note("Atalho apagado");
       p.close();
     }, feedback);
-  };
-  const move = (d: number) => {
-    const l = list();
-    const j = p.index + d;
-    if (j < 0 || j >= l.length) return;
-    [l[p.index], l[j]] = [l[j], l[p.index]];
-    void saveList(l).then(p.close, feedback);
   };
 
   return (
@@ -226,12 +305,6 @@ function AtalhoSheet(p: { a: Atalho; index: number; close: () => void }): JSX.El
           <Show when={!isNew}>
             <button class="btn ghost red-text" onClick={remove}>
               <Trash2 size={16} /> Apagar
-            </button>
-            <button class="icon" onClick={() => move(-1)} aria-label="Mover para trás">
-              <ChevronLeft size={20} />
-            </button>
-            <button class="icon" onClick={() => move(1)} aria-label="Mover para frente">
-              <ChevronRight size={20} />
             </button>
           </Show>
           <span class="grow" />

@@ -1,6 +1,6 @@
 //! Every action the phone or the settings window can ask for, by name (POST /api/cmd/{name}).
 
-use crate::{adb, config, lyrics, media, pc, update, whats, work};
+use crate::{adb, clima, config, lyrics, media, pc, update, whats, work};
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
@@ -102,7 +102,20 @@ pub fn run(app: &AppHandle, name: &str, args: Value) -> Result<Value, String> {
             let (exe, serial) = adb::current()?;
             adb::open_app(&exe, &serial).map(|_| Value::Null)
         }
-        "config_set" => config::set(args),
+        "config_set" => {
+            let before = config::get();
+            let out = config::set(args)?;
+            let after = config::get();
+            if (before.clima_lat, before.clima_lon) != (after.clima_lat, after.clima_lon) {
+                clima::refresh();
+            }
+            Ok(out)
+        }
+        "clima_atualizar" => {
+            clima::refresh();
+            Ok(Value::Null)
+        }
+        "clima_buscar" => clima::search(&str_arg(&args, "texto")),
         "abrir_painel_pc" => {
             let key = crate::server::KEY.get().ok_or("servidor parado")?;
             open::that(format!("http://127.0.0.1:{}/#k={key}", crate::server::PORT)).map(|_| Value::Null).map_err(|e| e.to_string())

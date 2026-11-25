@@ -36,6 +36,13 @@ pub struct Config {
     pub empresa: String,
     /// "teste" gets every build, "producao" only the promoted ones.
     pub canal: String,
+    /// Weather spot chosen in the settings; None = automatic (Windows location, then internet address).
+    pub clima_lat: Option<f64>,
+    pub clima_lon: Option<f64>,
+    pub clima_nome: String,
+    /// Shortcut screen layout: tile ids in order ("sys:…" for the built-in ones) and the hidden ones.
+    pub atalhos_ordem: Vec<String>,
+    pub atalhos_ocultos: Vec<String>,
     pub atalhos: Vec<Atalho>,
     /// Movidesk text of one period (each period is posted separately). Fields: {atividade} {tipo} {ticket} {descricao} {periodos} {inicio} {fim} {duracao} {horas} {data}.
     pub modelo: String,
@@ -82,6 +89,11 @@ impl Default for Config {
             nome: String::new(),
             empresa: "EasyPac".into(),
             canal: String::new(),
+            clima_lat: None,
+            clima_lon: None,
+            clima_nome: String::new(),
+            atalhos_ordem: Vec::new(),
+            atalhos_ocultos: Vec::new(),
             atalhos: vec![
                 at("saudacao", "Saudação", "texto", "Olá! Tudo bem? Sou {nome}, do suporte da {empresa}. Já estou verificando o seu chamado.", "#34d399"),
                 at("aguarde", "Pedir um momento", "texto", "Só um momento, por favor, que estou analisando aqui.", "#60a5fa"),

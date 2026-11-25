@@ -219,7 +219,7 @@ fn local_clock() -> (u32, u16, u16) {
 }
 
 /// Epoch ms of today at `minutes` past local midnight.
-fn today_at(minutes: u32) -> i64 {
+pub fn today_at(minutes: u32) -> i64 {
     let t = unsafe { GetLocalTime() };
     let since_midnight = (t.wHour as i64 * 3600 + t.wMinute as i64 * 60 + t.wSecond as i64) * 1000 + t.wMilliseconds as i64;
     crate::pc::now_ms() - since_midnight + minutes as i64 * 60_000

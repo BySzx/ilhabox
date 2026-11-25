@@ -16,6 +16,8 @@ export type Entry = { id: number; tipo: string; ticket: string; desc: string; se
 export type Atalho = { id: string; nome: string; tipo: "texto" | "site" | "programa" | "celular"; valor: string; colar: boolean; cor: string };
 export type Config = {
   nome: string; empresa: string; canal: string;
+  climaLat: number | null; climaLon: number | null; climaNome: string;
+  atalhosOrdem: string[]; atalhosOcultos: string[];
   atalhos: Atalho[]; modelo: string; tipos: string[]; metaMin: number; abrirAoConectar: boolean;
   easypacPacote: string; inicioTurno: string; fimTurno: string; mouseLado: string;
   movideskPalavra: string; lembreteMin: number; lembreteLongoMin: number; whatsMin: number; pausarAoTravar: boolean;
@@ -79,7 +81,7 @@ export const running = createMemo(() => entries().find(isRunning) ?? null);
 /** Paused activities, most recently touched first. */
 export const paused = createMemo(() => entries().filter((e) => isPaused(e) && !isLunch(e)).sort((a, b) => lastEnd(b) - lastEnd(a)));
 export const [config, setConfig] = createStore<Config>({
-  nome: "", empresa: "EasyPac", canal: "producao", atalhos: [], modelo: "", tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"], metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
+  nome: "", empresa: "EasyPac", canal: "producao", climaLat: null, climaLon: null, climaNome: "", atalhosOrdem: [], atalhosOcultos: [], atalhos: [], modelo: "", tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"], metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
   movideskPalavra: "movidesk", lembreteMin: 10, lembreteLongoMin: 120, whatsMin: 2, pausarAoTravar: true, checklists: [],
   juntarPausaMin: 10, buracoMin: 15,
 });
@@ -98,6 +100,15 @@ export function appName(pkg: string): string {
 }
 export const [update, setUpdate] = createSignal<Update>({ current: "", version: null });
 export const [loaded, setLoaded] = createSignal(false);
+
+export type Cond = "sol" | "parcial" | "nublado" | "neblina" | "chuva" | "tempestade";
+export type Clima = {
+  erro?: string; local?: string; origem?: "manual" | "windows" | "internet";
+  temp?: number; sensacao?: number | null; umidade?: number | null; vento?: number | null; min?: number; max?: number;
+  cond?: Cond; dia?: boolean; chuva?: number; mm?: number; diferenca?: number;
+  horas?: { t: number; temp: number; mm: number }[]; fontes?: { nome: string; temp: number; cond: Cond }[]; em?: number;
+};
+export const [clima, setClima] = createSignal<Clima | null>(null);
 
 export function initState(): void {
   on<Media>("media", (m) => {
@@ -129,6 +140,7 @@ export function initState(): void {
     if (v) newListeners.forEach((fn) => fn({ id: -1, at: v.at, chat: "", text: v.text, avatar: null }));
   });
   on<{ locked: boolean }>("pc", (v) => setPcLocked(!!v?.locked));
+  on<Clima>("clima", setClima);
   setInterval(() => setNow(Date.now()), 250);
 }
 

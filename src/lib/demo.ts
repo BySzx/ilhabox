@@ -33,6 +33,8 @@ export function seed(f: Fire): void {
     nome: "Fulano",
     empresa: "EasyPac",
     canal: "teste",
+    climaLat: null, climaLon: null, climaNome: "",
+    atalhosOrdem: [], atalhosOcultos: [],
     atalhos: [
       { id: "saudacao", nome: "Saudação", tipo: "texto", valor: "Olá! Tudo bem?", colar: true, cor: "#34d399" },
       { id: "aguarde", nome: "Pedir um momento", tipo: "texto", valor: "Só um momento…", colar: true, cor: "#60a5fa" },
@@ -65,6 +67,16 @@ export function seed(f: Fire): void {
   fire("whats-history", msgs);
   fire("phone", { status: "conectado", serial: "R58N", modelo: "SM A105M", easypacs: ["br.com.easypac.monitoramento", "br.com.easypac.supervisor"], appVersao: 1, erro: "" });
   fire("update", { current: "0.1.0", version: null });
+  const h0 = Math.ceil(now / 3_600_000) * 3_600_000;
+  fire("clima", {
+    local: "Centro, Cidade Exemplo", origem: "windows", temp: 26.5, sensacao: 28.5, umidade: 70, vento: 12, min: 19.5, max: 28.6,
+    cond: "parcial", dia: true, chuva: 40, mm: 0.4, diferenca: 1.8, em: now - 4 * 60000,
+    horas: Array.from({ length: 12 }, (_, k) => ({ t: h0 + k * 3_600_000, temp: Math.round((27 - Math.abs(k - 2) * 0.8) * 10) / 10, mm: k === 3 || k === 4 ? 1.2 : 0 })),
+    fontes: [
+      { nome: "ECMWF", temp: 26.5, cond: "parcial" }, { nome: "NOAA GFS", temp: 27.5, cond: "chuva" }, { nome: "DWD ICON", temp: 25.7, cond: "parcial" },
+      { nome: "MET Norway", temp: 26.3, cond: "nublado" }, { nome: "wttr.in", temp: 27, cond: "parcial" },
+    ],
+  });
   setTimeout(() => fire("whats", { id: 4, at: Date.now(), chat: "Marina (Comercial)", text: "Consegue olhar agora?", avatar: null }), 2500);
   if (new URLSearchParams(location.search).has("sugestao"))
     setTimeout(() => fire("sugestao", {

@@ -3,6 +3,8 @@
 
 mod adb;
 mod bus;
+mod clima;
+mod clima_fontes;
 mod cmd;
 mod config;
 mod diag;
@@ -124,6 +126,7 @@ pub fn run() {
             mouse::spawn(&config::get().mouse_lado);
             watch::spawn(dir.clone());
             update::spawn(app.handle().clone());
+            clima::spawn();
 
             let open = MenuItem::with_id(app, "open", "Ajustes", true, None::<&str>)?;
             let phone = MenuItem::with_id(app, "phone", "Mostrar no celular", true, None::<&str>)?;

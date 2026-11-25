@@ -5,6 +5,7 @@ import { backFromLunch, finish, pause, resume } from "./Horas";
 import { feedback } from "../ui";
 import { go } from "../App";
 import { ago, initials, tint } from "../whatsUi";
+import { ClimaMini } from "../Clima";
 
 export function Inicio(): JSX.Element {
   const today = createMemo(() => entriesOf(startOfDay(now())));
@@ -17,8 +18,13 @@ export function Inicio(): JSX.Element {
   return (
     <div class="home">
       <div class="card clockcard">
-        <div class="bigtime mono">{new Date(now()).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div>
-        <div class="date">{date()}</div>
+        <div class="clock-top">
+          <div>
+            <div class="bigtime mono">{new Date(now()).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div>
+            <div class="date">{date()}</div>
+          </div>
+          <ClimaMini />
+        </div>
         <div class="goal">
           <div class="goal-row">
             <span>Apontado hoje</span>
