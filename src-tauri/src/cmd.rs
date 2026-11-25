@@ -116,6 +116,14 @@ pub fn run(app: &AppHandle, name: &str, args: Value) -> Result<Value, String> {
             Ok(Value::Null)
         }
         "clima_buscar" => clima::search(&str_arg(&args, "texto")),
+        "clima_radar" => {
+            let url = match str_arg(&args, "qual").as_str() {
+                "simepar" => "https://www.simepar.br/simepar/radar_msc",
+                "ipmet" => "http://www.ipmet.unesp.br/index2.php?menu_esq1=&abre=ipmet_html/radar/ppi.php",
+                _ => return Err("radar desconhecido".into()),
+            };
+            open::that(url).map(|_| Value::Null).map_err(|e| e.to_string())
+        }
         "abrir_painel_pc" => {
             let key = crate::server::KEY.get().ok_or("servidor parado")?;
             open::that(format!("http://127.0.0.1:{}/#k={key}", crate::server::PORT)).map(|_| Value::Null).map_err(|e| e.to_string())

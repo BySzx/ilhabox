@@ -11,6 +11,7 @@ use parking_lot::Mutex;
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::sync::mpsc::{channel, Sender};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -48,10 +49,37 @@ pub fn refresh() {
     }
 }
 
+static STEP: Mutex<&'static str> = Mutex::new("");
+static SHOWN: AtomicBool = AtomicBool::new(false);
+static ROUND: AtomicU64 = AtomicU64::new(0);
+
+/// While nothing was shown yet, the phone sees which step is running instead of a bare "buscando".
+fn step(s: &'static str) {
+    *STEP.lock() = s;
+    diag::log(&format!("clima: {s}"));
+    if !SHOWN.load(Ordering::Relaxed) {
+        bus::keep("clima", json!({ "buscando": s }));
+    }
+}
+
+fn show(v: Value) {
+    SHOWN.store(true, Ordering::Relaxed);
+    bus::keep("clima", v);
+}
+
 pub fn spawn() {
     let (tx, rx) = channel();
     let _ = KICK.set(tx);
     std::thread::spawn(move || loop {
+        let round = ROUND.fetch_add(1, Ordering::Relaxed) + 1;
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(60));
+            if ROUND.load(Ordering::Relaxed) == round && !SHOWN.load(Ordering::Relaxed) {
+                let s = *STEP.lock();
+                diag::log(&format!("clima travou em: {s}"));
+                bus::keep("clima", json!({ "erro": format!("demorou demais ({s}); tento de novo em 15 min") }));
+            }
+        });
         tauri::async_runtime::block_on(run());
         let _ = rx.recv_timeout(EVERY);
         while rx.try_recv().is_ok() {}
@@ -64,10 +92,12 @@ async fn text(url: &str) -> Option<String> {
 }
 
 async fn run() {
+    step("procurando sua localização");
     let Some(place) = place().await else {
-        bus::keep("clima", json!({ "erro": "não consegui achar sua localização; escolha a cidade em Ajustes" }));
+        show(json!({ "erro": "não consegui achar sua localização; escolha a cidade em Ajustes" }));
         return;
     };
+    step("lendo as previsões");
     let (lat, lon) = (place.lat, place.lon);
     let clock = Clock { now: pc::now_ms(), day: crate::watch::today_at(0) };
 
@@ -97,31 +127,38 @@ async fn run() {
         ("wttr.in", read(4, &|v| fontes::wttr(v, clock))),
         ("CPTEC/INPE", cptec),
     ];
-    let measured = station_job.await.ok().flatten();
-    let (alerts, alerts_ok) = alerts_job.await.unwrap_or((Vec::new(), false));
-
-    let status: Vec<Value> = tried
+    let all: Vec<Reading> = tried.iter().filter_map(|(_, r)| r.as_ref()).map(Reading::copy).collect();
+    let mut status: Vec<Value> = tried
         .iter()
         .map(|(nome, r)| match r {
             Some(r) => json!({ "nome": nome, "ok": true, "temp": r.agora, "min": r.min, "max": r.max, "cond": r.cond }),
             None => json!({ "nome": nome, "ok": false }),
         })
-        .chain([
-            json!({ "nome": "INMET estação", "ok": measured.is_some() }),
-            json!({ "nome": "INMET avisos", "ok": alerts_ok }),
-        ])
         .collect();
-    let all: Vec<Reading> = tried.into_iter().filter_map(|(_, r)| r).collect();
+    let publish = |measured: Option<&fontes::Measured>, alerts: &[fontes::Alert], status: &[Value]| {
+        if all.iter().all(|r| r.agora.is_none()) && measured.is_none() {
+            show(json!({ "erro": "nenhuma fonte de clima respondeu", "local": place.nome, "fontes": status }));
+            return;
+        }
+        let mut out = fontes::merge(&all, measured, alerts, clock);
+        out["local"] = json!(place.nome);
+        out["origem"] = json!(place.origem);
+        out["fontes"] = json!(status);
+        show(out);
+    };
+    let waiting = |nome: &str| json!({ "nome": nome, "ok": false, "esperando": true });
+    publish(None, &[], &[status.clone(), vec![waiting("INMET estação"), waiting("INMET avisos")]].concat());
+
+    step("lendo a estação do INMET");
+    let measured = station_job.await.ok().flatten();
+    status.push(json!({ "nome": "INMET estação", "ok": measured.is_some() }));
+    publish(measured.as_ref(), &[], &[status.clone(), vec![waiting("INMET avisos")]].concat());
+
+    step("lendo os avisos do INMET");
+    let (alerts, alerts_ok) = alerts_job.await.unwrap_or((Vec::new(), false));
+    status.push(json!({ "nome": "INMET avisos", "ok": alerts_ok }));
+    publish(measured.as_ref(), &alerts, &status);
     diag::log(&format!("clima {} fontes={} medido={} avisos={}", place.nome, all.iter().map(|r| r.fonte).collect::<Vec<_>>().join(","), measured.is_some(), alerts.len()));
-    if all.iter().all(|r| r.agora.is_none()) && measured.is_none() {
-        bus::keep("clima", json!({ "erro": "nenhuma fonte de clima respondeu", "local": place.nome, "fontes": status }));
-        return;
-    }
-    let mut out = fontes::merge(&all, measured.as_ref(), &alerts, clock);
-    out["local"] = json!(place.nome);
-    out["origem"] = json!(place.origem);
-    out["fontes"] = json!(status);
-    bus::keep("clima", out);
 }
 
 async fn text_owned(url: String) -> Option<String> {
@@ -155,26 +192,26 @@ async fn measured(lat: f64, lon: f64, clock: Clock) -> Option<fontes::Measured> 
 
 static CAPS: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
 
-/// INMET warnings in force here. The CAP files never change, so each is downloaded once.
+/// INMET warnings in force here. The CAP files never change, so each is downloaded once; new ones
+/// come 8 at a time, at most 48 per round and for at most 40 s, so a slow server never holds the rest.
 async fn alerts(lat: f64, lon: f64, city: String, now: i64) -> (Vec<fontes::Alert>, bool) {
     let Some(rss) = text("https://apiprevmet3.inmet.gov.br/avisos/rss").await else { return (Vec::new(), false) };
     let links = fontes::rss_links(&rss);
-    let mut out = Vec::new();
-    for link in &links {
-        let cached = CAPS.lock().iter().find(|(l, _)| l == link).map(|(_, x)| x.clone());
-        let cap = match cached {
-            Some(x) => x,
-            None => {
-                let Some(x) = text(link).await else { continue };
-                CAPS.lock().push((link.clone(), x.clone()));
-                x
+    let missing: Vec<String> = links.iter().filter(|l| !CAPS.lock().iter().any(|(c, _)| c == *l)).take(48).cloned().collect();
+    let started = pc::now_ms();
+    for chunk in missing.chunks(8) {
+        if pc::now_ms() - started > 40_000 {
+            break;
+        }
+        let jobs: Vec<_> = chunk.iter().cloned().map(|l| tauri::async_runtime::spawn(async move { (text(&l).await, l) })).collect();
+        for j in jobs {
+            if let Ok((Some(x), l)) = j.await {
+                CAPS.lock().push((l, x));
             }
-        };
-        if let Some(a) = fontes::cap_alert(&cap, (lat, lon), &city, now) {
-            out.push(a);
         }
     }
     CAPS.lock().retain(|(l, _)| links.contains(l));
+    let out = CAPS.lock().iter().filter_map(|(_, cap)| fontes::cap_alert(cap, (lat, lon), &city, now)).collect();
     (out, true)
 }
 

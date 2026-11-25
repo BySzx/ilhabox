@@ -22,6 +22,10 @@ pub struct Reading {
 }
 
 impl Reading {
+    pub fn copy(&self) -> Self {
+        Reading { horas: self.horas.clone(), ..*self }
+    }
+
     fn daily(fonte: &'static str, min: f64, max: f64) -> Self {
         Reading { fonte, agora: None, sensacao: None, umidade: None, vento: None, min: Some(min), max: Some(max), cond: None, dia: true, chuva_mm: None, prob: None, horas: Vec::new() }
     }

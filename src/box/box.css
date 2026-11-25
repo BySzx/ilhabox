@@ -136,6 +136,7 @@ input[type="time"] { font-family: var(--mono); }
 .wx-sources { display: grid; gap: 8px; font-size: 12px; }
 .wx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .wx-chip.off { opacity: 0.45; }
+.wx-radar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
 .wx-measured { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 12px; color: #86efac; }
 .wx-warn { display: inline-flex; align-items: center; gap: 3px; max-width: 100%; overflow: hidden; white-space: nowrap; padding: 1px 7px; border-radius: 99px; font-size: 11px; font-weight: 700; }
 .wx-alert { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; margin-bottom: 10px; border-radius: 14px; font-size: 13px; }

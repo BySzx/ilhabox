@@ -103,11 +103,11 @@ export const [loaded, setLoaded] = createSignal(false);
 
 export type Cond = "sol" | "parcial" | "nublado" | "neblina" | "chuva" | "tempestade";
 export type Clima = {
-  erro?: string; local?: string; origem?: "manual" | "windows" | "internet";
+  erro?: string; buscando?: string; local?: string; origem?: "manual" | "windows" | "internet";
   temp?: number; sensacao?: number | null; umidade?: number | null; vento?: number | null; min?: number; max?: number;
   cond?: Cond; dia?: boolean; chuva?: number; mm?: number; diferenca?: number;
   previsto?: number | null; horas?: { t: number; temp: number; mm: number }[]; em?: number;
-  fontes?: { nome: string; ok: boolean; temp?: number | null; min?: number | null; max?: number | null; cond?: Cond | null }[];
+  fontes?: { nome: string; ok: boolean; esperando?: boolean; temp?: number | null; min?: number | null; max?: number | null; cond?: Cond | null }[];
   medido?: { estacao: string; km: number; temp: number; em: number } | null;
   alertas?: { evento: string; grau: string; ate: number | null; texto: string }[];
 };

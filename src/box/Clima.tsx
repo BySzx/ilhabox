@@ -1,4 +1,4 @@
-import { Cloud, CloudFog, CloudLightning, CloudMoon, CloudRain, CloudSun, Droplets, MapPin, Moon, RefreshCw, Sun, Thermometer, TriangleAlert, Wind, X } from "lucide-solid";
+import { Cloud, CloudFog, CloudLightning, CloudMoon, CloudRain, CloudSun, Droplets, MapPin, Moon, Radar, RefreshCw, Sun, Thermometer, TriangleAlert, Wind, X } from "lucide-solid";
 import { createSignal, For, Show, type JSX } from "solid-js";
 import { cmd } from "../lib/api";
 import { clima, now, type Cond } from "../lib/state";
@@ -44,7 +44,7 @@ export function ClimaMini(): JSX.Element {
   return (
     <>
       <button class="wx-mini" onClick={() => setOpen(true)}>
-        <Show when={clima()?.temp != null} fallback={<span class="dim wx-wait">{clima()?.erro ? "clima indisponível" : "buscando clima…"}</span>}>
+        <Show when={clima()?.temp != null} fallback={<span class="dim wx-wait">{clima()?.erro ? "clima indisponível · toque" : `${clima()?.buscando ?? "buscando clima"}…`}</span>}>
           <div class="wx-now">
             <CondIcon cond={clima()?.cond} dia={clima()?.dia} size={34} />
             <b class="mono">{deg(clima()?.temp)}</b>
@@ -76,6 +76,7 @@ function ClimaSheet(p: { close: () => void }): JSX.Element {
     const d = c().diferenca ?? 0;
     return d <= 1.5 ? "concordam" : d <= 3 ? "divergem um pouco" : "divergem bastante";
   };
+  const radar = (qual: string) => void cmd("clima_radar", { qual }).then(() => note("Abrindo o radar no PC"), feedback);
   const refresh = () => void cmd("clima_atualizar").then(() => note("Atualizando o clima…"), feedback);
 
   return (
@@ -108,7 +109,7 @@ function ClimaSheet(p: { close: () => void }): JSX.Element {
             </div>
           )}
         </For>
-        <Show when={c().temp != null} fallback={<p class="dim">{c().erro ?? "Buscando…"}</p>}>
+        <Show when={c().temp != null} fallback={<p class="dim">{c().erro ?? `${c().buscando ?? "Buscando"}…`}</p>}>
           <div class="wx-main">
             <CondIcon cond={c().cond} dia={c().dia} size={56} />
             <div>
@@ -155,7 +156,7 @@ function ClimaSheet(p: { close: () => void }): JSX.Element {
                     </Show>
                     {f.nome}
                     <b class="mono">
-                      {!f.ok ? "sem resposta" : f.temp != null ? deg(f.temp) : f.min != null ? `${deg(f.min)} / ${deg(f.max)}` : "ok"}
+                      {f.esperando ? "buscando…" : !f.ok ? "sem resposta" : f.temp != null ? deg(f.temp) : f.min != null ? `${deg(f.min)} / ${deg(f.max)}` : "ok"}
                     </b>
                   </span>
                 )}
@@ -163,6 +164,15 @@ function ClimaSheet(p: { close: () => void }): JSX.Element {
             </div>
           </div>
         </Show>
+        <div class="wx-radar">
+          <span class="dim">Radar de chuva (abre no PC):</span>
+          <button class="btn ghost sm" onClick={() => radar("simepar")}>
+            <Radar size={14} /> Simepar · Paraná
+          </button>
+          <button class="btn ghost sm" onClick={() => radar("ipmet")}>
+            <Radar size={14} /> IPMet · Presidente Prudente
+          </button>
+        </div>
       </div>
     </div>
   );
