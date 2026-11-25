@@ -331,6 +331,13 @@ export function Ajustes(): JSX.Element {
             <input type="checkbox" checked={auto()} onChange={(e) => void invoke<boolean>("autostart", { on: e.currentTarget.checked }).then((v) => setAuto(!!v))} />
             Iniciar com o Windows
           </label>
+          <label class="field small">
+            Atualizações
+            <select value={draft.canal} onChange={(e) => edit(() => setDraft("canal", e.currentTarget.value))}>
+              <option value="producao">Produção (só as liberadas)</option>
+              <option value="teste">Teste (todas, antes dos outros)</option>
+            </select>
+          </label>
           <div class="row">
             <Show
               when={update().version}

@@ -1,7 +1,7 @@
 name: release
 
-# Code stays in this private repo; the installer and latest.json go to the public
-# BySzx/ilhabox-releases, which is where the IlhaBox looks for updates.
+# The installer and latest.json go to the public BySzx/ilhabox-releases as a prerelease and to the
+# "teste" channel. Only producao.txt (promover.yml) hands a version to everyone else.
 # Runs when the version changes (tauri.conf.json): pushing a tag isn't needed.
 on:
   push:
@@ -77,7 +77,19 @@ jobs:
           releaseCommitish: main
           tagName: v__VERSION__
           releaseName: 'IlhaBox v__VERSION__'
-          releaseBody: 'Instale no PC do trabalho. Quem já tem atualiza pelo botão no celular ou em Ajustes › Sistema.'
+          releaseBody: 'Instale no PC do trabalho. Depois disso ele atualiza pelo botão no celular ou em Ajustes › Sistema.'
           releaseDraft: false
-          prerelease: false
+          prerelease: true
           args: --config src-tauri/tauri.release.json
+
+      - name: Canal de teste
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          $v = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $repo = 'BySzx/ilhabox-releases'
+          gh release download "v$v" -R $repo -p latest.json -D canal --clobber
+          gh release view teste -R $repo *> $null
+          if ($LASTEXITCODE -ne 0) { gh release create teste -R $repo --target main --prerelease --title 'Canal de teste' --notes 'Versões em teste. Quem está em Produção não recebe.' }
+          gh release upload teste canal/latest.json -R $repo --clobber

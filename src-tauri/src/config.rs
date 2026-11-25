@@ -34,6 +34,8 @@ pub struct Config {
     /// Filled into phrases as {nome} and {empresa}.
     pub nome: String,
     pub empresa: String,
+    /// "teste" gets every build, "producao" only the promoted ones.
+    pub canal: String,
     pub atalhos: Vec<Atalho>,
     /// Movidesk text of one period (each period is posted separately). Fields: {atividade} {tipo} {ticket} {descricao} {periodos} {inicio} {fim} {duracao} {horas} {data}.
     pub modelo: String,
@@ -79,6 +81,7 @@ impl Default for Config {
         Self {
             nome: String::new(),
             empresa: "EasyPac".into(),
+            canal: String::new(),
             atalhos: vec![
                 at("saudacao", "Saudação", "texto", "Olá! Tudo bem? Sou {nome}, do suporte da {empresa}. Já estou verificando o seu chamado.", "#34d399"),
                 at("aguarde", "Pedir um momento", "texto", "Só um momento, por favor, que estou analisando aqui.", "#60a5fa"),
@@ -127,6 +130,12 @@ pub fn init(dir: PathBuf) {
         }),
         Err(_) => Config::default(),
     };
+    let mut cfg = cfg;
+    if cfg.canal.is_empty() {
+        // The original install still has the folder of the old app id; that one is the test PC.
+        let original = dir.parent().is_some_and(|p| p.join("dev.alexandre.ilhabox").is_dir());
+        cfg.canal = if original { "teste" } else { "producao" }.into();
+    }
     bus::send("config", &cfg, true);
     *CFG.lock() = Some((path, cfg));
 }

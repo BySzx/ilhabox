@@ -32,6 +32,7 @@ export function seed(f: Fire): void {
   config = {
     nome: "Fulano",
     empresa: "EasyPac",
+    canal: "teste",
     atalhos: [
       { id: "saudacao", nome: "Saudação", tipo: "texto", valor: "Olá! Tudo bem?", colar: true, cor: "#34d399" },
       { id: "aguarde", nome: "Pedir um momento", tipo: "texto", valor: "Só um momento…", colar: true, cor: "#60a5fa" },

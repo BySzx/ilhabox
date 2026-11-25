@@ -15,7 +15,7 @@ export type Seg = { s: number; e: number | null; sent?: boolean };
 export type Entry = { id: number; tipo: string; ticket: string; desc: string; segs: Seg[]; check?: string[]; done: boolean; start: number; end: number | null; sent: boolean };
 export type Atalho = { id: string; nome: string; tipo: "texto" | "site" | "programa" | "celular"; valor: string; colar: boolean; cor: string };
 export type Config = {
-  nome: string; empresa: string;
+  nome: string; empresa: string; canal: string;
   atalhos: Atalho[]; modelo: string; tipos: string[]; metaMin: number; abrirAoConectar: boolean;
   easypacPacote: string; inicioTurno: string; fimTurno: string; mouseLado: string;
   movideskPalavra: string; lembreteMin: number; lembreteLongoMin: number; whatsMin: number; pausarAoTravar: boolean;
@@ -79,7 +79,7 @@ export const running = createMemo(() => entries().find(isRunning) ?? null);
 /** Paused activities, most recently touched first. */
 export const paused = createMemo(() => entries().filter((e) => isPaused(e) && !isLunch(e)).sort((a, b) => lastEnd(b) - lastEnd(a)));
 export const [config, setConfig] = createStore<Config>({
-  nome: "", empresa: "EasyPac", atalhos: [], modelo: "", tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"], metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
+  nome: "", empresa: "EasyPac", canal: "producao", atalhos: [], modelo: "", tipos: ["Ticket", "WhatsApp", "Reunião", "Curso", "Dúvida interna", "Outro"], metaMin: 480, abrirAoConectar: true, easypacPacote: "", inicioTurno: "08:00", fimTurno: "18:00", mouseLado: "direita",
   movideskPalavra: "movidesk", lembreteMin: 10, lembreteLongoMin: 120, whatsMin: 2, pausarAoTravar: true, checklists: [],
   juntarPausaMin: 10, buracoMin: 15,
 });

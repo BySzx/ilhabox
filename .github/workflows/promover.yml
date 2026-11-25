@@ -1,0 +1,19 @@
+name: promover
+
+# Hands a tested version to everyone on the "producao" channel: producao.txt holds the version.
+on:
+  push:
+    branches: [main]
+    paths: ['producao.txt']
+  workflow_dispatch:
+
+jobs:
+  promover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          v=$(tr -d ' \r\n' < producao.txt)
+          gh release edit "v$v" -R BySzx/ilhabox-releases --prerelease=false --latest
