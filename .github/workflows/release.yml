@@ -2,9 +2,11 @@ name: release
 
 # Code stays in this private repo; the installer and latest.json go to the public
 # BySzx/ilhabox-releases, which is where the IlhaBox looks for updates.
+# Runs when the version changes (tauri.conf.json): pushing a tag isn't needed.
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths: ['src-tauri/tauri.conf.json', '.github/workflows/release.yml']
   workflow_dispatch:
 
 jobs:
