@@ -111,6 +111,10 @@ pub fn init(dir: PathBuf) {
     let cutoff = now_ms() - KEEP_DAYS * DAY_MS;
     book.entries.retain(|e| e.start >= cutoff || !e.done);
     book.livres.retain(|g| g.s >= cutoff);
+    normalize(&mut book);
+    for e in &mut book.entries {
+        e.refresh();
+    }
     publish(&book);
     *BOOK.lock() = Some((path, book));
 }
@@ -119,6 +123,7 @@ fn with<T>(f: impl FnOnce(&mut Book) -> Result<T, String>) -> Result<T, String> 
     let mut g = BOOK.lock();
     let (path, book) = g.as_mut().ok_or("apontamentos não carregados")?;
     let out = f(book)?;
+    normalize(book);
     for e in &mut book.entries {
         e.refresh();
     }
@@ -126,6 +131,83 @@ fn with<T>(f: impl FnOnce(&mut Book) -> Result<T, String>) -> Result<T, String> 
     write(path, book);
     publish(book);
     Ok(out)
+}
+
+/// Same activity: same kind and ticket; for other kinds, the same description (or one of them empty).
+fn same_activity(a: &Entry, b: &Entry) -> bool {
+    let kind = |e: &Entry| if e.tipo.is_empty() { "Ticket".to_string() } else { e.tipo.clone() };
+    kind(a) == kind(b)
+        && if kind(a) == "Ticket" { !a.ticket.is_empty() && a.ticket == b.ticket } else { a.desc.is_empty() || b.desc.is_empty() || a.desc == b.desc }
+}
+
+/// Anything else timed between `from` and `to`, apart from the given entries.
+fn busy_between(book: &Book, skip: &[u64], from: i64, to: i64) -> bool {
+    let now = now_ms();
+    book.entries.iter().filter(|e| !skip.contains(&e.id)).flat_map(|e| e.segs.iter()).any(|g| g.e.unwrap_or(now) > from && g.s < to)
+}
+
+/**
+ * Short breaks (bathroom, coffee, a minute doing nothing) never split an activity: periods of the
+ * same activity apart by up to "juntar_pausa_min", with nothing else timed in between, become
+ * one — also when the activity was started again with Iniciar instead of Continuar. Periods
+ * already posted in Movidesk are never touched.
+ */
+fn normalize(book: &mut Book) {
+    let join_ms = crate::config::get().juntar_pausa_min as i64 * 60_000;
+    if join_ms == 0 {
+        return;
+    }
+    // Two entries of the same activity, one right after the other: the later one joins the earlier.
+    loop {
+        book.entries.sort_by_key(|e| e.start);
+        let mut pair = None;
+        'search: for (i, a) in book.entries.iter().enumerate() {
+            let Some(a_end) = a.segs.last().and_then(|g| g.e) else { continue };
+            if a.segs.last().is_some_and(|g| g.sent) {
+                continue;
+            }
+            for (j, b) in book.entries.iter().enumerate() {
+                let Some(first) = b.segs.first() else { continue };
+                if i == j || first.sent || first.s < a_end || first.s - a_end > join_ms || !same_activity(a, b) {
+                    continue;
+                }
+                if !busy_between(book, &[a.id, b.id], a_end, first.s) {
+                    pair = Some((i, j));
+                    break 'search;
+                }
+            }
+        }
+        let Some((i, j)) = pair else { break };
+        let b = book.entries.remove(j);
+        let i = if j < i { i - 1 } else { i };
+        let a = &mut book.entries[i];
+        if a.desc.is_empty() {
+            a.desc = b.desc;
+        }
+        a.check.extend(b.check.into_iter().filter(|c| !a.check.contains(c)).collect::<Vec<_>>());
+        a.segs.extend(b.segs);
+        a.done = b.done;
+    }
+    // Inside one entry: consecutive periods with a short break and nothing else in between.
+    let snapshot: Vec<(u64, Vec<Seg>)> = book.entries.iter().map(|e| (e.id, e.segs.clone())).collect();
+    for e in &mut book.entries {
+        e.segs.sort_by_key(|g| g.s);
+        let mut out: Vec<Seg> = Vec::with_capacity(e.segs.len());
+        for g in e.segs.drain(..) {
+            if let Some(prev) = out.last_mut() {
+                if let Some(end) = prev.e {
+                    let others = snapshot.iter().filter(|(id, _)| *id != e.id).flat_map(|(_, s)| s.iter());
+                    let blocked = others.clone().any(|o| o.e.unwrap_or(i64::MAX) > end && o.s < g.s);
+                    if !prev.sent && !g.sent && g.s >= end && g.s - end <= join_ms && !blocked {
+                        prev.e = g.e;
+                        continue;
+                    }
+                }
+            }
+            out.push(g);
+        }
+        e.segs = out;
+    }
 }
 
 fn next_id(book: &Book) -> u64 {
