@@ -1,4 +1,4 @@
-//! Updates from the public BySzx/ilhabox-releases: checked every 30 min and on request; the phone
+//! Updates from the public BySzx/ilhabox-releases: checked every 5 min and on request; the phone
 //! shows a button, one tap downloads, installs and restarts the PC side. Every build goes to the
 //! "teste" channel first; "producao" only gets the ones promoted with producao.txt. The phone app itself is
 //! updated by adb when the new PC side sees an older one on the phone.
@@ -33,7 +33,7 @@ pub fn spawn(app: AppHandle) {
         tokio_sleep(Duration::from_secs(15)).await;
         loop {
             let _ = check(&app).await;
-            tokio_sleep(Duration::from_secs(30 * 60)).await;
+            tokio_sleep(Duration::from_secs(5 * 60)).await;
         }
     });
 }
