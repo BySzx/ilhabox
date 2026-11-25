@@ -106,7 +106,10 @@ export type Clima = {
   erro?: string; local?: string; origem?: "manual" | "windows" | "internet";
   temp?: number; sensacao?: number | null; umidade?: number | null; vento?: number | null; min?: number; max?: number;
   cond?: Cond; dia?: boolean; chuva?: number; mm?: number; diferenca?: number;
-  horas?: { t: number; temp: number; mm: number }[]; fontes?: { nome: string; temp: number; cond: Cond }[]; em?: number;
+  previsto?: number | null; horas?: { t: number; temp: number; mm: number }[]; em?: number;
+  fontes?: { nome: string; ok: boolean; temp?: number | null; min?: number | null; max?: number | null; cond?: Cond | null }[];
+  medido?: { estacao: string; km: number; temp: number; em: number } | null;
+  alertas?: { evento: string; grau: string; ate: number | null; texto: string }[];
 };
 export const [clima, setClima] = createSignal<Clima | null>(null);
 

@@ -1,4 +1,4 @@
-import { Cloud, CloudFog, CloudLightning, CloudMoon, CloudRain, CloudSun, Droplets, MapPin, Moon, RefreshCw, Sun, Wind, X } from "lucide-solid";
+import { Cloud, CloudFog, CloudLightning, CloudMoon, CloudRain, CloudSun, Droplets, MapPin, Moon, RefreshCw, Sun, Thermometer, TriangleAlert, Wind, X } from "lucide-solid";
 import { createSignal, For, Show, type JSX } from "solid-js";
 import { cmd } from "../lib/api";
 import { clima, now, type Cond } from "../lib/state";
@@ -34,6 +34,8 @@ export function CondIcon(p: { cond?: Cond; dia?: boolean; size: number }): JSX.E
 }
 
 const deg = (v?: number | null) => (v == null ? "–" : `${Math.round(v)}°`);
+const level = (grau: string) => (grau === "Grande perigo" ? "red" : grau === "Perigo" ? "orange" : "yellow");
+const day = (t: number) => new Date(t).toLocaleString("pt-BR", { weekday: "short", hour: "2-digit", minute: "2-digit" });
 const hour = (t: number) => new Date(t).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 /** Small block for the clock card; a tap opens the details. */
@@ -53,6 +55,11 @@ export function ClimaMini(): JSX.Element {
           <span class="wx-rain-line">
             <Droplets size={13} /> {clima()?.chuva ?? 0}%
           </span>
+          <Show when={clima()?.alertas?.length}>
+            <span class={`wx-warn ${level(clima()!.alertas![0].grau)}`}>
+              <TriangleAlert size={12} /> {clima()!.alertas![0].evento}
+            </span>
+          </Show>
         </Show>
       </button>
       <Show when={open()}>
@@ -67,7 +74,7 @@ function ClimaSheet(p: { close: () => void }): JSX.Element {
   const age = () => (c().em ? Math.max(0, Math.round((now() - (c().em ?? 0)) / 60000)) : null);
   const trust = () => {
     const d = c().diferenca ?? 0;
-    return d <= 1.5 ? "fontes concordam" : d <= 3 ? "fontes divergem um pouco" : "fontes divergem bastante";
+    return d <= 1.5 ? "concordam" : d <= 3 ? "divergem um pouco" : "divergem bastante";
   };
   const refresh = () => void cmd("clima_atualizar").then(() => note("Atualizando o clima…"), feedback);
 
@@ -87,12 +94,34 @@ function ClimaSheet(p: { close: () => void }): JSX.Element {
             <X size={20} />
           </button>
         </div>
+        <For each={c().alertas ?? []}>
+          {(a) => (
+            <div class={`wx-alert ${level(a.grau)}`}>
+              <TriangleAlert size={18} />
+              <div>
+                <b>
+                  {a.evento} · {a.grau}
+                  {a.ate ? ` · até ${day(a.ate)}` : ""}
+                </b>
+                <span>{a.texto}</span>
+              </div>
+            </div>
+          )}
+        </For>
         <Show when={c().temp != null} fallback={<p class="dim">{c().erro ?? "Buscando…"}</p>}>
           <div class="wx-main">
             <CondIcon cond={c().cond} dia={c().dia} size={56} />
             <div>
               <div class="wx-big mono">{deg(c().temp)}</div>
               <div>{TEXT[c().cond ?? "nublado"]}</div>
+              <Show when={c().medido}>
+                {(m) => (
+                  <div class="wx-measured">
+                    <Thermometer size={13} /> medido às {hour(m().em)} na estação {m().estacao} ({m().km} km)
+                    {c().previsto != null ? ` · modelos: ${deg(c().previsto)}` : ""}
+                  </div>
+                )}
+              </Show>
             </div>
             <div class="wx-facts">
               <span>Sensação <b class="mono">{deg(c().sensacao)}</b></span>
@@ -114,13 +143,20 @@ function ClimaSheet(p: { close: () => void }): JSX.Element {
           </div>
           <div class="wx-sources">
             <span class="dim">
-              {(c().fontes ?? []).length} fontes, {trust()} (diferença de {c().diferenca}°){age() != null ? ` · atualizado há ${age()} min` : ""}
+              {(c().fontes ?? []).filter((f) => f.ok).length} de {(c().fontes ?? []).length} fontes responderam · modelos {trust()} (diferença de {c().diferenca}°)
+              {age() != null ? ` · atualizado há ${age()} min` : ""}
             </span>
             <div class="wx-chips">
               <For each={c().fontes ?? []}>
                 {(f) => (
-                  <span class="wx-chip">
-                    <CondIcon cond={f.cond} dia={c().dia} size={14} /> {f.nome} <b class="mono">{deg(f.temp)}</b>
+                  <span class="wx-chip" classList={{ off: !f.ok }}>
+                    <Show when={f.cond}>
+                      <CondIcon cond={f.cond ?? undefined} dia={c().dia} size={14} />
+                    </Show>
+                    {f.nome}
+                    <b class="mono">
+                      {!f.ok ? "sem resposta" : f.temp != null ? deg(f.temp) : f.min != null ? `${deg(f.min)} / ${deg(f.max)}` : "ok"}
+                    </b>
                   </span>
                 )}
               </For>

@@ -72,9 +72,13 @@ export function seed(f: Fire): void {
     local: "Centro, Cidade Exemplo", origem: "windows", temp: 26.5, sensacao: 28.5, umidade: 70, vento: 12, min: 19.5, max: 28.6,
     cond: "parcial", dia: true, chuva: 40, mm: 0.4, diferenca: 1.8, em: now - 4 * 60000,
     horas: Array.from({ length: 12 }, (_, k) => ({ t: h0 + k * 3_600_000, temp: Math.round((27 - Math.abs(k - 2) * 0.8) * 10) / 10, mm: k === 3 || k === 4 ? 1.2 : 0 })),
+    previsto: 26.6,
+    medido: { estacao: "CIDADE EXEMPLO", km: 6, temp: 26.5, em: h0 - 3_600_000 },
+    alertas: [{ evento: "Tempestade", grau: "Perigo potencial", ate: h0 + 10 * 3_600_000, texto: "Chuva entre 20 e 30 mm/h ou até 50 mm/dia, ventos intensos (40-60 km/h) e queda de granizo." }],
     fontes: [
-      { nome: "ECMWF", temp: 26.5, cond: "parcial" }, { nome: "NOAA GFS", temp: 27.5, cond: "chuva" }, { nome: "DWD ICON", temp: 25.7, cond: "parcial" },
-      { nome: "MET Norway", temp: 26.3, cond: "nublado" }, { nome: "wttr.in", temp: 27, cond: "parcial" },
+      { nome: "ECMWF", ok: true, temp: 26.5, cond: "parcial" }, { nome: "NOAA GFS", ok: true, temp: 27.5, cond: "chuva" }, { nome: "DWD ICON", ok: true, temp: 25.7, cond: "parcial" },
+      { nome: "MET Norway", ok: true, temp: 26.3, cond: "nublado" }, { nome: "wttr.in", ok: false }, { nome: "CPTEC/INPE", ok: true, min: 19, max: 29 },
+      { nome: "INMET estação", ok: true }, { nome: "INMET avisos", ok: true },
     ],
   });
   setTimeout(() => fire("whats", { id: 4, at: Date.now(), chat: "Marina (Comercial)", text: "Consegue olhar agora?", avatar: null }), 2500);
