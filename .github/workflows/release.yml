@@ -6,7 +6,7 @@ name: release
 on:
   push:
     branches: [main]
-    paths: ['src-tauri/tauri.conf.json', '.github/workflows/release.yml']
+    paths: ['src-tauri/tauri.conf.json']
   workflow_dispatch:
 
 jobs:
@@ -93,3 +93,4 @@ jobs:
           gh release view teste -R $repo *> $null
           if ($LASTEXITCODE -ne 0) { gh release create teste -R $repo --target main --prerelease --title 'Canal de teste' --notes 'Versões em teste. Quem está em Produção não recebe.' }
           gh release upload teste canal/latest.json -R $repo --clobber
+          gh release delete-asset "v$v" "IlhaBox_${v}_x64-setup.exe.sig" -R $repo -y
