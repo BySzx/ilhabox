@@ -121,7 +121,7 @@ pub fn spawn(app: AppHandle, key: String) {
             }
         };
         diag::log(&format!("servidor ouvindo em 127.0.0.1:{PORT}"));
-        bus::keep("server", json!({ "ok": true, "port": PORT }));
+        bus::keep("server", json!({ "ok": true, "port": PORT, "versao": app.package_info().version.to_string() }));
         for req in server.incoming_requests() {
             let (app, key) = (app.clone(), key.clone());
             thread::spawn(move || handle(app, key, req));

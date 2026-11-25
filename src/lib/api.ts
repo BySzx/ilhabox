@@ -75,6 +75,21 @@ export async function connect(): Promise<void> {
     es.addEventListener(topic, (e) => fire(topic, JSON.parse((e as MessageEvent<string>).data)));
   }
   es.onerror = () => setOnline(false);
+  on("server", (v) => reloadIfUpdated((v as { versao?: string }).versao));
+}
+
+declare const __VERSAO__: string;
+
+/** The phone keeps this page open across PC updates; once the PC runs a new version, load the new screens. */
+function reloadIfUpdated(versao: string | undefined): void {
+  if (!versao || versao === __VERSAO__) return;
+  try {
+    if (sessionStorage.getItem("recarregou") === versao) return;
+    sessionStorage.setItem("recarregou", versao);
+  } catch {
+    /* ignore */
+  }
+  location.reload();
 }
 
 /**

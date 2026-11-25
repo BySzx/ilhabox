@@ -168,6 +168,18 @@ pub fn open_app(exe: &Path, serial: &str) -> Result<String, String> {
     shell(exe, serial, &["am", "start", "-n", ACTIVITY])
 }
 
+/// True once per PC version: the phone page loaded before an update still runs the old screens.
+fn pc_updated(app: &AppHandle) -> bool {
+    let Ok(dir) = app.path().app_data_dir() else { return false };
+    let file = dir.join("versao-celular.txt");
+    let now = app.package_info().version.to_string();
+    if std::fs::read_to_string(&file).is_ok_and(|v| v.trim() == now) {
+        return false;
+    }
+    let _ = std::fs::write(&file, &now);
+    true
+}
+
 /// First connection of a phone: tunnel, app up to date, key, and (if wanted) the panel in front.
 fn setup(app: &AppHandle, exe: &Path, serial: &str, model: &str, key: &str) -> Phone {
     let mut p = Phone { status: "instalando".into(), serial: serial.into(), modelo: model.into(), ..Default::default() };
@@ -199,7 +211,8 @@ fn setup(app: &AppHandle, exe: &Path, serial: &str, model: &str, key: &str) -> P
     }
     p.easypacs = find_easypacs(exe, serial);
     if config::get().abrir_ao_conectar {
-        if let Err(e) = open_app(exe, serial) {
+        let fresh = if pc_updated(app) { shell(exe, serial, &["am", "start", "-S", "-n", ACTIVITY]) } else { open_app(exe, serial) };
+        if let Err(e) = fresh {
             diag::log(&format!("nao abriu o app: {e}"));
         }
     }
