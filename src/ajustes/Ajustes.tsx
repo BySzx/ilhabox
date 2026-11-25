@@ -81,6 +81,7 @@ export function Ajustes(): JSX.Element {
           <span class="dot" classList={{ off: !online() }} />
           IlhaBox
           <span class="dim ver mono">v{update().current}</span>
+          <span class="canal" classList={{ test: config.canal === "teste" }}>{config.canal === "teste" ? "canal teste" : "produção"}</span>
         </div>
         <span class="grow" />
         <Show when={saved()}>

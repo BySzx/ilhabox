@@ -2,7 +2,7 @@ import { Clock3, House, LayoutGrid, MessageCircle, Music, Download } from "lucid
 import { createSignal, For, onMount, Show, type JSX } from "solid-js";
 import { cmd, online, phone } from "../lib/api";
 import { rgba } from "../lib/color";
-import { artColor, clock, isLunch, length, now, onNewMessage, paused, running, tag, toast, update } from "../lib/state";
+import { artColor, clock, config, isLunch, length, now, onNewMessage, paused, running, tag, toast, update } from "../lib/state";
 import { Atalhos } from "./pages/Atalhos";
 import { Horas } from "./pages/Horas";
 import { Inicio } from "./pages/Inicio";
@@ -73,6 +73,9 @@ export function App(): JSX.Element {
               <Download size={14} />
               {update().progress != null ? `${Math.round((update().progress ?? 0) * 100)}%` : `Atualizar ${update().version}`}
             </button>
+          </Show>
+          <Show when={config.canal === "teste"}>
+            <span class="chip test">teste v{update().current}</span>
           </Show>
           <span class="mono time">{time()}</span>
         </div>

@@ -59,6 +59,7 @@ input[type="time"] { font-family: var(--mono); }
 .time { font-size: 15px; font-weight: 600; }
 .chip { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: 99px; font-size: 12px; font-weight: 700; }
 .chip.green { background: var(--green); color: #052e1f; }
+.chip.test { background: rgba(251, 191, 36, 0.16); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.4); }
 
 .dock { grid-area: dock; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 8px; }
 .dock button {
