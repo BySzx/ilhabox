@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "IlhaBox",
-  "version": "0.3.5",
-  "identifier": "dev.alexandre.ilhabox",
+  "version": "0.3.6",
+  "identifier": "com.ilhabox",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1430",
@@ -35,6 +35,7 @@
     }
   },
   "bundle": {
+    "publisher": "IlhaBox",
     "active": true,
     "targets": [
       "nsis"

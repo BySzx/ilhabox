@@ -27,6 +27,18 @@ use tauri_plugin_autostart::ManagerExt;
 
 struct Key(String);
 
+/// Up to 0.3.5 the data folder was named after the old app id; copied once, the old one stays as a backup.
+fn migrate_from_old_folder(dir: &Path) {
+    let Some(old) = dir.parent().map(|p| p.join("dev.alexandre.ilhabox")) else { return };
+    if dir.join("config.json").exists() || dir.join("apontamentos.json").exists() || !old.is_dir() {
+        return;
+    }
+    let Ok(files) = fs::read_dir(&old) else { return };
+    for f in files.flatten().filter(|f| f.path().is_file()) {
+        let _ = fs::copy(f.path(), dir.join(f.file_name()));
+    }
+}
+
 /// The key the phone and the settings window use on the API; made once, kept in the config folder.
 fn load_key(dir: &Path) -> String {
     let path = dir.join("box.key");
@@ -89,6 +101,7 @@ pub fn run() {
         .setup(|app| {
             let dir = app.path().app_config_dir()?;
             fs::create_dir_all(&dir)?;
+            migrate_from_old_folder(&dir);
             diag::init(dir.clone());
             diag::log(&format!("INICIO versao={} config={}", app.package_info().version, dir.display()));
 

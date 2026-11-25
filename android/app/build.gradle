@@ -7,11 +7,11 @@ plugins {
 def versao = file("../versao.txt").text.trim().toInteger()
 
 android {
-    namespace "dev.alexandre.ilhabox"
+    namespace "com.ilhabox"
     compileSdk 35
 
     defaultConfig {
-        applicationId "dev.alexandre.ilhabox"
+        applicationId "com.ilhabox"
         minSdk 23
         targetSdk 35
         versionCode versao

@@ -15,7 +15,7 @@ const STATUS: Record<string, string> = {
 };
 
 const TIPOS: { v: Atalho["tipo"]; label: string; hint: string }[] = [
-  { v: "texto", label: "Texto", hint: "Mensagem que vai pro PC" },
+  { v: "texto", label: "Texto", hint: "Mensagem que vai pro PC; {nome} e {empresa} viram os dados acima" },
   { v: "site", label: "Site", hint: "https://…" },
   { v: "programa", label: "Programa", hint: "C:\\caminho\\programa.exe" },
   { v: "celular", label: "App do celular", hint: "pacote, ex.: com.whatsapp" },
@@ -184,6 +184,17 @@ export function Ajustes(): JSX.Element {
               <Plus size={15} /> Novo
             </button>
           </h2>
+          <div class="row">
+            <label class="field small">
+              Seu nome
+              <input value={draft.nome} placeholder="como aparece nas frases" onInput={(e) => edit(() => setDraft("nome", e.currentTarget.value))} />
+            </label>
+            <label class="field small">
+              Empresa
+              <input value={draft.empresa} onInput={(e) => edit(() => setDraft("empresa", e.currentTarget.value))} />
+            </label>
+            <span class="hint">Nas frases, escreva {"{nome}"} e {"{empresa}"}.</span>
+          </div>
           <div class="atalhos">
             <For each={draft.atalhos}>
               {(a, i) => (

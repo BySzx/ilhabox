@@ -20,7 +20,7 @@ const DONE: Record<Atalho["tipo"], string> = {
 };
 
 const TIPOS: { v: Atalho["tipo"]; label: string; hint: string }[] = [
-  { v: "texto", label: "Frase", hint: "Texto que vai pro PC" },
+  { v: "texto", label: "Frase", hint: "Texto que vai pro PC; {nome} e {empresa} viram os dados dos Ajustes" },
   { v: "site", label: "Site", hint: "https://…" },
   { v: "programa", label: "Programa do PC", hint: "C:\\caminho\\programa.exe" },
   { v: "celular", label: "App do celular", hint: "pacote, ex.: com.whatsapp" },

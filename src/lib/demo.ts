@@ -30,6 +30,8 @@ export function seed(f: Fire): void {
     mk(4, "Reunião", "", "levantamento de requisitos", [[now - 23 * 60000 - 17000, null]], false),
   ];
   config = {
+    nome: "Fulano",
+    empresa: "EasyPac",
     atalhos: [
       { id: "saudacao", nome: "Saudação", tipo: "texto", valor: "Olá! Tudo bem?", colar: true, cor: "#34d399" },
       { id: "aguarde", nome: "Pedir um momento", tipo: "texto", valor: "Só um momento…", colar: true, cor: "#60a5fa" },

@@ -31,6 +31,9 @@ pub struct Checklist {
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Config {
+    /// Filled into phrases as {nome} and {empresa}.
+    pub nome: String,
+    pub empresa: String,
     pub atalhos: Vec<Atalho>,
     /// Movidesk text of one period (each period is posted separately). Fields: {atividade} {tipo} {ticket} {descricao} {periodos} {inicio} {fim} {duracao} {horas} {data}.
     pub modelo: String,
@@ -74,8 +77,10 @@ impl Default for Config {
             cor: cor.into(),
         };
         Self {
+            nome: String::new(),
+            empresa: "EasyPac".into(),
             atalhos: vec![
-                at("saudacao", "Saudação", "texto", "Olá! Tudo bem? Sou o Alexandre, do suporte da EasyPac. Já estou verificando o seu chamado.", "#34d399"),
+                at("saudacao", "Saudação", "texto", "Olá! Tudo bem? Sou {nome}, do suporte da {empresa}. Já estou verificando o seu chamado.", "#34d399"),
                 at("aguarde", "Pedir um momento", "texto", "Só um momento, por favor, que estou analisando aqui.", "#60a5fa"),
                 at("print", "Pedir print", "texto", "Consegue me enviar um print da tela com a mensagem que aparece?", "#f59e0b"),
                 at("encerrar", "Encerramento", "texto", "Ficou alguma dúvida? Se precisar de algo mais, é só chamar. Tenha um ótimo dia!", "#a78bfa"),

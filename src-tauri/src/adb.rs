@@ -11,9 +11,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
-pub const PACKAGE: &str = "dev.alexandre.ilhabox";
-const ACTIVITY: &str = "dev.alexandre.ilhabox/.Main";
-const RECEIVER: &str = "dev.alexandre.ilhabox/.Chave";
+pub const PACKAGE: &str = "com.ilhabox";
+const ACTIVITY: &str = "com.ilhabox/.Main";
+const RECEIVER: &str = "com.ilhabox/.Chave";
+const OLD_PACKAGE: &str = "dev.alexandre.ilhabox";
 /// Version of the APK shipped inside this build; the phone app is replaced when it has an older one.
 const APK_VERSION: u32 = parse_u32(include_str!("../../android/versao.txt"));
 const TOOLS_URL: &str = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip";
@@ -205,6 +206,9 @@ fn setup(app: &AppHandle, exe: &Path, serial: &str, model: &str, key: &str) -> P
             None if p.app_versao == 0 => return Phone { status: "erro".into(), erro: "este build veio sem o app do celular".into(), ..p },
             None => {}
         }
+    }
+    if shell(exe, serial, &["pm", "list", "packages", OLD_PACKAGE]).is_ok_and(|o| o.lines().any(|l| l.trim() == format!("package:{OLD_PACKAGE}"))) {
+        let _ = shell(exe, serial, &["pm", "uninstall", OLD_PACKAGE]);
     }
     if let Err(e) = give_key(exe, serial, key) {
         diag::log(&format!("chave nao entregue: {e}"));

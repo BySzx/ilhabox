@@ -12,7 +12,7 @@ fn atalho(id: &str) -> Result<Value, String> {
     let a = config::get().atalhos.into_iter().find(|a| a.id == id).ok_or("atalho não existe")?;
     match a.tipo.as_str() {
         "texto" => {
-            pc::set_clipboard(&a.valor)?;
+            pc::set_clipboard(&fill(&a.valor)?)?;
             if a.colar {
                 pc::paste();
             }
@@ -23,6 +23,21 @@ fn atalho(id: &str) -> Result<Value, String> {
         _ => return Err("tipo de atalho inválido".into()),
     }
     Ok(Value::Null)
+}
+
+/// Phrases may carry {nome} and {empresa}, set once in the settings.
+fn fill(text: &str) -> Result<String, String> {
+    let c = config::get();
+    let mut out = text.to_string();
+    for (tag, value, label) in [("{nome}", c.nome.trim(), "seu nome"), ("{empresa}", c.empresa.trim(), "a empresa")] {
+        if out.contains(tag) {
+            if value.is_empty() {
+                return Err(format!("Preencha {label} em Ajustes › Atalhos de suporte"));
+            }
+            out = out.replace(tag, value);
+        }
+    }
+    Ok(out)
 }
 
 /// Starts an app on the phone through adb (works whatever Android lets apps see of each other).

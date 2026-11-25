@@ -166,7 +166,7 @@ fn automation() -> Option<IUIAutomation> {
     }
 }
 
-/// Ticket number in a Movidesk address, e.g. "atak.movidesk.com/Ticket/EditByProtocol/202611034537".
+/// Ticket number in a Movidesk address, e.g. "empresa.movidesk.com/Ticket/EditByProtocol/202601010001".
 pub fn parse_ticket_url(url: &str) -> Option<String> {
     let low = url.to_lowercase();
     if !low.contains("movidesk") {
@@ -548,12 +548,12 @@ mod tests {
         );
         assert_eq!(parse_ticket("48230 | Sem acesso | Movidesk", "movidesk").map(|t| t.0), Some("48230".into()));
         assert_eq!(parse_ticket("YouTube - Google Chrome", "movidesk"), None);
-        assert_eq!(super::parse_ticket_url("atak.movidesk.com/Ticket/EditByProtocol/202611034537"), Some("202611034537".into()));
-        assert_eq!(super::parse_ticket_url("https://atak.movidesk.com/Ticket/Edit/48230?x=1"), Some("48230".into()));
-        assert_eq!(super::parse_ticket_url("atak.movidesk.com/Ticket"), None);
-        let page: Vec<String> = ["UNIÃO AVICOLA", "202611034537", "Problema ao gerar qr code", "Ticket aberto via sistema pelo agente ALEXANDRE em 23/11/2026 16:49"]
+        assert_eq!(super::parse_ticket_url("empresa.movidesk.com/Ticket/EditByProtocol/202601010001"), Some("202601010001".into()));
+        assert_eq!(super::parse_ticket_url("https://empresa.movidesk.com/Ticket/Edit/48230?x=1"), Some("48230".into()));
+        assert_eq!(super::parse_ticket_url("empresa.movidesk.com/Ticket"), None);
+        let page: Vec<String> = ["CLIENTE EXEMPLO", "202601010001", "Erro ao gerar relatório", "Ticket aberto via sistema pelo agente FULANO em 01/01/2026 16:49"]
             .map(String::from)
             .to_vec();
-        assert_eq!(super::ticket_subject(&page), Some("Problema ao gerar qr code".into()));
+        assert_eq!(super::ticket_subject(&page), Some("Erro ao gerar relatório".into()));
     }
 }
